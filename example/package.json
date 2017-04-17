@@ -1,0 +1,20 @@
+{
+  "name": "gulp-task-maker-example",
+  "private": true,
+  "scripts": {
+    "build": "cross-env NODE_NOTIFIER=1 gulp build",
+    "watch": "cross-env NODE_NOTIFIER=1 gulp watch"
+  },
+  "dependencies": {
+    "jquery": "^3.2",
+    "normalize.css": "^6.0"
+  },
+  "devDependencies": {
+    "cross-env": "^4.0",
+    "gulp": "^3.9.1",
+    "gulp-task-maker": "file:../"
+  },
+  "browserslist": [
+    "last 2 versions", "ie >= 11"
+  ]
+}
