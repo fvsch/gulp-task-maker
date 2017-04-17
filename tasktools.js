@@ -23,20 +23,18 @@ const notify = require('./notify.js')
  * - logSize (pre-configured gulp-size)
  */
 module.exports = {
-  // File/task flow management
+  // Gulp plugins
   'concat': concat,
   'if': gulpif,
-  'gulpif': gulpif, // longer name for e.g. destructing
+  'gulpif': gulpif,
+  'plumber': plumber,
   'rename': rename,
+  'size': size,
   'sourcemaps': sourcemaps,
 
   // Logging helpers and error management
-  'plumber': plumber,
   'notify': notify,
-  'logErrors': function() {
-    return plumber(notify)
-  },
-  'size': size,
+  'logErrors': logErrors,
   'logSize': logSize,
 
   // Gulp-based file builder with sourcemaps and concatenation support,
@@ -45,10 +43,18 @@ module.exports = {
 }
 
 /**
+ * gulp-plumber with our custom error handler
+ * @returns {*}
+ */
+function logErrors() {
+  return plumber(notify)
+}
+
+/**
  * Helper function using gulp-size to log the size and path
  * of a file we're about to to write to the filesystem.
  * @param {string} dir - path to output files
- * @return gulp-size
+ * @return {*}
  */
 function logSize(dir) {
   return size({
@@ -59,32 +65,24 @@ function logSize(dir) {
 }
 
 /**
- * Create a gulp read-then-write stream, with sourcemaps (enabled by default)
- * and concatenation of sources (depending on if the `dest` config property
- * has an extension).
+ * Create a gulp read-then-write stream, with sourcemaps (enabled by default),
+ * better error logging, and output logging.
  * @param {object} userConfig
  * @param {Array} transforms
+ * @return {*}
  */
 function commonBuilder(userConfig, transforms) {
-  if (Array.isArray(transforms)) {
-    transforms = []
-  }
-  const conf = Object.assign({
-    sourcemaps: true,
-    concat: path.extname(userConfig.dest) !== ''
-  }, userConfig)
-
-  const destName = path.basename(conf.dest)
-  const destRoot = conf.concat ? path.dirname(conf.dest) : conf.dest
+  if (!Array.isArray(transforms)) { transforms = [] }
+  const conf = Object.assign({ sourcemaps: true }, userConfig)
+  const destRoot = path.extname(conf.dest) !== '' ? path.dirname(conf.dest) : conf.dest
   const destMaps = typeof conf.sourcemaps === 'string' ? conf.sourcemaps : '.'
 
-  // create plumbed stream, init sourcemaps and concat
+  // create plumbed stream, init sourcemaps
   let stream = gulp.src(conf.src)
     .pipe( plumber(notify) )
     .pipe( gulpif(conf.sourcemaps, sourcemaps.init()) )
-    .pipe( gulpif(conf.concat, concat(destName)) )
 
-  // insert source transforms in the middle (after concat)
+  // insert source transforms in the middle
   for (let transform of transforms) {
     stream = stream.pipe(transform)
   }
