@@ -1,0 +1,35 @@
+{
+  "name": "gulp-task-maker",
+  "version": "1.0.0",
+  "repository": "https://github.com/fvsch/gulp-task-maker",
+  "license": "MIT",
+  "keywords": [
+    "gulp",
+    "helper",
+    "task builder"
+  ],
+  "files": [
+    "LICENSE",
+    "README.md",
+    "index.js",
+    "notify.js",
+    "tasktools.js"
+  ],
+  "peerDependencies": {
+    "gulp": "^3.9"
+  },
+  "dependencies": {
+    "glob": "^7.1",
+    "gulp-concat": "^2.6",
+    "gulp-if": "^2.0",
+    "gulp-plumber": "^1.1",
+    "gulp-rename": "^1.2",
+    "gulp-size": "^2.1",
+    "gulp-sourcemaps": "^2.6",
+    "gulp-util": "^3.0",
+    "node-notifier": "^5.1"
+  },
+  "engines": {
+    "node": ">=4.0"
+  }
+}
