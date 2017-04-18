@@ -1,7 +1,8 @@
 {
   "name": "gulp-task-maker",
-  "description": "Helps you write configurable gulp tasks, where the config is separated from the implementation, with good developer usability (e.g. it uses node-notifier to signal build errors using system notifications). Focused on building assets (CSS, JS, etc.); some batteries included (gulp-sourcemaps, gulp-concat).",
+  "description": "Helps you write configurable gulp tasks — where the config is separated from the implementation — with good developer usability. Some batteries included: logging and system notifications, gulp-if, gulp-sourcemaps, gulp-concat, gulp-rename.",
   "version": "1.0.0",
+  "author": "Florens Verschelde <florens@fvsch.com>",
   "repository": "https://github.com/fvsch/gulp-task-maker",
   "license": "MIT",
   "keywords": [
@@ -10,11 +11,9 @@
     "task builder"
   ],
   "files": [
-    "LICENSE",
-    "README.md",
-    "index.js",
-    "notify.js",
-    "tasktools.js"
+    "/README.md",
+    "/LICENSE",
+    "/*.js"
   ],
   "peerDependencies": {
     "gulp": "^3.9"
