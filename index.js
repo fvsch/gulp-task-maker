@@ -5,10 +5,7 @@ const glob = require('glob')
 const gulp = require('gulp')
 const path = require('path')
 const notify = require('./notify.js')
-const taskTools = require('./tasktools.js')
-const isObject = require('util').isObject
-
-module.exports = taskMaker
+const tools = require('./tasktools.js')
 
 /**
  * Resolve the provided tasks directory path and return the createTasks function
@@ -16,10 +13,10 @@ module.exports = taskMaker
  * @param {Object} config - configuration for build tasks
  * @returns {Function}
  */
-function taskMaker(dir, config) {
+module.exports = function gulpTaskMaker(dir, config) {
   let taskDir = null
   let dirExists = false
-  const hasConfig = isObject(config)
+  const hasConfig = config !== null && typeof config === 'object'
   if (typeof dir === 'string') {
     taskDir = path.isAbsolute(dir) ? path.normalize(dir) : path.join(process.cwd(), dir)
     dirExists = fs.existsSync(taskDir)
@@ -132,7 +129,7 @@ function createTaskSet(key, configs, builder) {
         notifyMissingSource(pattern, id)
       })
       // do the actual building
-      builder(conf, taskTools)
+      builder(conf, tools)
     })
     taskNames.push(buildId)
 

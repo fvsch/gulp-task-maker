@@ -5,17 +5,26 @@ Helps you write gulp tasks focused on building assets, so that you can:
 
 1. Separate task configuration and implementation.
 2. Get matching `build` and `watch` tasks for free.
-3. Multiple builds for each task. Want to compile CSS, making 2 or 3 stylesheets with different sources and configuration?
+3. Configure multiple builds for each task (e.g. with different sources and configuration).
 4. Improve developer usability by logging what gets written to disk, use system notifications for errors, etc.
 
-`gulp-task-maker` also bundles basic gulp plugins such as `gulp-sourcemaps`, `gulp-if` and `gulp-concat`.
+`gulp-task-maker` also bundles basic gulp plugins such as `gulp-sourcemaps`, `gulp-if` and `gulp-concat`, and provides a `commonBuilder` helper function that takes care of the most common tasks, reducing boilerplate between tasks.
+
+⚠ Requires Node.js 4 or later.
 
 
 Example usage
 -------------
 
+At the root of your project, install as a dependency:
+
+```bash
+npm install gulp-task-maker --save-dev
+```
+
+Then in your `gulpfile.js`, you could have:
+
 ```js
-// MY_PROJECT/gulpfile.js
 require('gulp-task-maker')('gulp-tasks', {
   mytask: {
     src: ['src/foo/foo.js', 'src/bar/*.js'],
@@ -25,10 +34,10 @@ require('gulp-task-maker')('gulp-tasks', {
 })
 ```
 
-And the corresponding task script would be:
+This will instruct `gulp-task-maker` to load `./gulp-tasks/mytask.js`, which could look like:
 
 ```js
-// MY_PROJECT/gulp-tasks/mytask.js
+// gulp-tasks/mytask.js
 const path = require('path')
 const gulp = require('gulp')
 const somePlugin = require('gulp-something')
@@ -45,49 +54,42 @@ module.exports = function mytaskBuilder(config, tools) {
 }
 ```
 
-Note that the same setup can be simplified by using the `commonBuilder` helper, which takes care of reading source files, setting up the error and success logging, and optionally adding sourcemaps.
+Compared to a more DIY gulp workflow, we gained a few things:
+
+- the task’s logic and its config (input files, output path, and any other configuration you want) are separated;
+- we can provide more than one build config (as an array of objects);
+- we will get a watch task automatically;
+- we improved error handling and result reports.
+
+We could also simplify our task’s function further by using the `tools.commonBuilder` helper:
 
 ```js
-// MY_PROJECT/gulp-tasks/mytask.js
+// gulp-tasks/mytask.js
 const path = require('path')
 const somePlugin = require('gulp-something')
 
 module.exports = function mytaskBuilder(config, tools) {
-  // apply default options
-  config = Object.assign({sourcemaps:true}, config)
-  // simple builder with two transforms
   return tools.commonBuilder(config, [
-    tools.concat('output.js'),
+    tools.concat(path.basename(config.dest)),
     somePlugin()
   ])
 }
 ```
 
-Finally, I recommend creating a `mytask.json` file alongside the `mytask.js` script, with a list of dependencies:
-
-```json
-{
-  "dependencies": {
-    "gulp-something": "^1.0.0"
-  }
-}
-```
-
-Why do that? Well, if you try to use a task which has missing dependencies, gulp-task-builder will read this JSON file (and those of other configured tasks) and print the `npm` command to install them. This can be useful if you want to copy tasks from one project to another.
-
-For more examples, see:
-
-- the `example` directory in this repo, which has two simple tasks
-- the https://github.com/gradientz/assets-builder repo
+See the “Writing tasks” section for details.
 
 
-Multiple builds for a task
---------------------------
+Configuring tasks
+-----------------
+
+*TODO: explain syntax for the gulpTaskMaker function.*
+
+### Multiple builds for a task
 
 Each task can be called with multiple config objects, wrapped in an array:
 
 ```js
-// MY_PROJECT/gulpfile.js
+// gulpfile.js
 require('gulp-task-maker')('gulp-tasks', {
   mytask: [
     {
@@ -105,12 +107,26 @@ require('gulp-task-maker')('gulp-tasks', {
 ```
 
 
-The `config` and `tools` arguments
-----------------------------------
+Writing tasks
+-------------
+
+*TODO: reorganize this section*
+
+I recommend creating a `mytask.json` file alongside the `mytask.js` script, with a list of dependencies:
+
+```json
+{
+  "dependencies": {
+    "gulp-something": "^1.0.0"
+  }
+}
+```
+
+Why do that? Well, if you try to use a task which has missing dependencies, gulp-task-builder will read this JSON file (and those of other configured tasks) and print the `npm` command to install them. This can be useful if you want to copy tasks from one project to another.
 
 Your task function will be called with two arguments. You can call them however you want (e.g. `conf` and `$` for short), but we’ll use `config` and `tools` as a convention.
 
-### `config`
+### The `config` argument
 
 The config object for a given build. This gets normalized to an object with those properties:
 
@@ -120,7 +136,7 @@ The config object for a given build. This gets normalized to an object with thos
 
 Note that you won’t need to use the `watch` property in your task's function, because it's managed automatically by `gulp-task-maker`.
 
-### `tools`
+### The `tools` argument
 
 The `tools` object is a collection of very common gulp plugins:
 

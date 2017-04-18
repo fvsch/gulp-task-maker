@@ -64,8 +64,8 @@ function logSize(dir) {
 }
 
 /**
- * Create a gulp read-then-write stream, with sourcemaps (enabled by default),
- * better error logging, and output logging.
+ * Create a gulp workload (read, transform, then write to disk),
+ * with sourcemaps support and better error and output logging.
  * @param {object} config
  * @param {Array} transforms
  * @return {*}
