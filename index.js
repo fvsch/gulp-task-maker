@@ -158,7 +158,7 @@ function registerTask(configName, scriptPath, userConfig) {
     })
     return
   }
-  if (KNOWN_SCRIPTS.includes(configName)) {
+  if (KNOWN_SCRIPTS.indexOf(configName) !== -1) {
     showError({
       message: `Tasks already configured for '${configName}'`,
       details: USAGE_REDECLARE
@@ -178,7 +178,7 @@ function registerTask(configName, scriptPath, userConfig) {
       const knownMissing = checkDependencies(configName, scriptPath)
       // did we alert about that missing dependency already?
       const moduleName = (err.message.match(/module '(.*)'/) || [null,null])[1]
-      if (moduleName && knownMissing.includes(moduleName)) {
+      if (moduleName && knownMissing.indexOf(moduleName) !== -1) {
         handled = true
       }
     }
@@ -244,17 +244,17 @@ function registerGlobalTasks(defaultTask) {
   if (tasks.length === 0) return
 
   // Register or update tasks groups
-  gulp.task('build', tasks.filter(s => s.includes('build')))
-  gulp.task('watch', tasks.filter(s => s.includes('watch')))
+  gulp.task('build', tasks.filter(s => s.indexOf('build') === 0))
+  gulp.task('watch', tasks.filter(s => s.indexOf('watch') === 0))
 
   // Register the default task if defined and valid
   if (typeof defaultTask === 'function') {
     gulp.task('default', defaultTask)
   }
   else if (Array.isArray(defaultTask) && defaultTask.length > 0) {
-    gulp.task('default', defaultTask.filter(s => tasks.includes(s)))
+    gulp.task('default', defaultTask)
   }
-  else if (typeof defaultTask === 'string' && tasks.includes(defaultTask)) {
+  else if (typeof defaultTask === 'string') {
     gulp.task('default', [defaultTask])
   }
 }
