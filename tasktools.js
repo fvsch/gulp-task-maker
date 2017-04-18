@@ -25,7 +25,6 @@ const notify = require('./notify.js')
 module.exports = {
   // Gulp plugins
   'concat': concat,
-  'if': gulpif,
   'gulpif': gulpif,
   'plumber': plumber,
   'rename': rename,
@@ -67,29 +66,36 @@ function logSize(dir) {
 /**
  * Create a gulp read-then-write stream, with sourcemaps (enabled by default),
  * better error logging, and output logging.
- * @param {object} userConfig
+ * @param {object} config
  * @param {Array} transforms
  * @return {*}
  */
-function commonBuilder(userConfig, transforms) {
+function commonBuilder(config, transforms) {
   if (!Array.isArray(transforms)) { transforms = [] }
-  const conf = Object.assign({ sourcemaps: true }, userConfig)
-  const destRoot = path.extname(conf.dest) !== '' ? path.dirname(conf.dest) : conf.dest
-  const destMaps = typeof conf.sourcemaps === 'string' ? conf.sourcemaps : '.'
+  const destRoot = path.extname(config.dest) !== '' ? path.dirname(config.dest) : config.dest
+
+  // sourcemaps off by default: not all file formats can use them!
+  let doMaps = Boolean(config.sourcemaps), destMaps = '.'
+  if (typeof config.sourcemaps === 'string') {
+    doMaps = true; destMaps = config.sourcemaps
+  }
 
   // create plumbed stream, init sourcemaps
-  let stream = gulp.src(conf.src)
+  let stream = gulp.src(config.src)
     .pipe( plumber(notify) )
-    .pipe( gulpif(conf.sourcemaps, sourcemaps.init()) )
+    .pipe( gulpif(doMaps, sourcemaps.init()) )
 
   // insert source transforms in the middle
-  for (let transform of transforms) {
-    stream = stream.pipe(transform)
+  for (let t of transforms) {
+    // check that it does look like a Transform stream
+    if (typeof t === 'object' && t !== null && t.readable === true && t.writable === true) {
+      stream = stream.pipe(t)
+    }
   }
 
   // log file sizes, write files and sourcemaps
   return stream
     .pipe( logSize(destRoot) )
-    .pipe( gulpif(conf.sourcemaps, sourcemaps.write(destMaps)) )
+    .pipe( gulpif(doMaps, sourcemaps.write(destMaps)) )
     .pipe( gulp.dest(destRoot) )
 }
