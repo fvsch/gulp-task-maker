@@ -11,9 +11,9 @@
  * see https://github.com/gradientz/assets-builder
  */
 
-const gulpTaskMaker = require('gulp-task-maker')
+const gtm = require('gulp-task-maker')
 
-const mincssConfig = {
+const mincss = {
   src: [
     'node_modules/normalize.css/normalize.css',
     'src/*.css'
@@ -22,7 +22,7 @@ const mincssConfig = {
   dest: 'dist/output.css'
 }
 
-const minjsConfig = {
+const minjs = {
   src: [
     'node_modules/jquery/dist/jquery.js',
     'src/*.js'
@@ -31,9 +31,4 @@ const minjsConfig = {
   dest: 'dist/output.js'
 }
 
-// Showing two different ways to setup a task script
-// - gulpTaskMaker.load takes a folder path, and the config for one or more scripts
-// - gulpTaskMaker.task takes a script path, and the config for that script
-
-gulpTaskMaker.load('tasks', { mincss: mincssConfig })
-gulpTaskMaker.task('tasks/minjs.js', minjsConfig)
+gtm.load('tasks', { mincss, minjs })

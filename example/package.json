@@ -2,8 +2,9 @@
   "name": "gulp-task-maker-example",
   "private": true,
   "scripts": {
-    "build": "cross-env NODE_NOTIFIER=1 gulp build",
-    "watch": "cross-env NODE_NOTIFIER=1 gulp watch"
+    "tasks": "gulp --tasks",
+    "build": "cross-env NOTIFY=1 gulp build",
+    "watch": "cross-env NOTIFY=1 gulp watch"
   },
   "dependencies": {
     "jquery": "^3.2",
