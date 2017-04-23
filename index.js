@@ -5,20 +5,42 @@ const glob = require('glob')
 const gulp = require('gulp')
 const path = require('path')
 const notify = require('./notify.js')
-const tools = require('./tasktools.js')
+const taskTools = require('./tasktools.js')
 const isObject = obj => obj !== null && typeof obj === 'object'
 
+// Export the configuration
 module.exports = {
+  config: configureTaskMaker,
   load: loadTasks,
-  task: loadSingleTask,
-  tools: tools
+  task: loadSingle,
+  tools: taskTools
 }
 
-/** @var {Array} maintain a list of already registered scripts */
-const KNOWN_SCRIPTS = []
+/**
+ * gulp-task-maker state
+ * @var {object}
+ * @property {string} taskDir - relative path to tasks directory
+ * @property {string|boolean} buildTask - name to use for the global 'build' task
+ * @property {string|boolean} watchTask - name to use for the global 'watch' task
+ * @property {*} defaultTask - value to use (string, array, function…) for the 'default' task
+ * @property {Array} _knownScripts - maintain a list of already registered scripts
+ * @property {Array} _registeredTasks - maintain a list of already registered tasks
+ */
+const GTM = {
+  buildTask: 'build',
+  watchTask: 'watch',
+  defaultTask: true,
+  _knownScripts: [],
+  _registeredTasks: [],
+}
 
-/** @var {Array} maintain a list of already registered tasks */
-const REGISTERED_TASKS = []
+/**
+ * Changes to config after the gulpTaskMaker.load or gulpTaskMaker.task
+ * methods have been used would not affect those early uses, and make things
+ * inconsistent.
+ * @var {boolean}
+ */
+let lockConfig = false
 
 /** @var {string} usage info for several errors */
 const USAGE_INFO = `Expected usage:
@@ -26,15 +48,6 @@ const gtm = require('gulp-task-maker')
 
 // set up with the task directory path
 gtm.load('path/to/tasks', {
-  mytask: { … },
-  othertask: { … }
-})
-
-// or with more options
-gtm.load({
-  taskDir: 'path/to/tasks',
-  defaultTask: 'build'
-}, {
   mytask: { … },
   othertask: { … }
 })
@@ -61,17 +74,42 @@ gtm.task('path/to/mytask.js', [
 `
 
 /**
+ * Allows users to override default configuration
+ * @param {object|undefined} config - options, or undefined to return the current config
+ * @param {string|boolean} config.buildTask - name to use for the main build task, false to disable
+ * @param {string|boolean} config.watchTask - name to use for the main watch task, false to disable
+ * @param {*} config.defaultTask - value for the default task, false to disable
+ * @returns {object} Current config
+ */
+function configureTaskMaker(config) {
+  if (isObject(config)) {
+    if (lockConfig === true) {
+      throw showError({
+        message: 'gulp-task-maker configuration cannot be changed at this point',
+        details: 'The `gulpTaskMaker.config` method cannot be called after any use of `gulpTaskMaker.load` or `gulpTaskMaker.task`.'
+      })
+    }
+    if (typeof config.buildTask === 'string' || config.buildTask === false) {
+      GTM.buildTask = config.buildTask
+    }
+    if (typeof config.watchTask === 'string' || config.watchTask === false) {
+      GTM.watchTask = config.watchTask
+    }
+    if (typeof config.defaultTask !== 'undefined') {
+      GTM.defaultTask = config.defaultTask
+    }
+  }
+  return GTM
+}
+
+/**
  * Resolve the provided tasks directory path and return the createTasks function
- * @param {string|object} options - task directory path or fully-fledged config
- * @param {string} options.taskDir - setup config
- * @param {*} options.defaultTask - value for the 'default' gulp task
+ * @param {string} taskDir - task directory path or fully-fledged config
  * @param {Object} tasksConfig - tasks config
  */
-function loadTasks(options, tasksConfig) {
-  const taskDir = isObject(options) ? options.taskDir : options
-  const defaultTask = isObject(options) ? options.defaultTask : 'build'
+function loadTasks(taskDir, tasksConfig) {
+  lockConfig = true
   let realDir = null
-
   if (typeof taskDir !== 'string') {
     showError({
       message: `gulpTaskMaker.load: missing taskDir option`,
@@ -106,7 +144,7 @@ function loadTasks(options, tasksConfig) {
       registerTask(key, path.join(realDir, key + '.js'), tasksConfig[key])
     }
     // register 'build', 'watch' and 'default' tasks
-    registerGlobalTasks(defaultTask)
+    registerGlobalTasks()
   }
   else {
     process.exitCode = 1
@@ -118,7 +156,8 @@ function loadTasks(options, tasksConfig) {
  * @param {string} scriptPath
  * @param {object} taskConfig
  */
-function loadSingleTask(scriptPath, taskConfig) {
+function loadSingle(scriptPath, taskConfig) {
+  lockConfig = true
   if (typeof scriptPath !== 'string') {
     throw showError({
       message: `gulpTaskMaker.task: first argument must be a string`,
@@ -158,7 +197,7 @@ function registerTask(configName, scriptPath, userConfig) {
     })
     return
   }
-  if (KNOWN_SCRIPTS.indexOf(configName) !== -1) {
+  if (GTM._knownScripts.indexOf(configName) !== -1) {
     showError({
       message: `Tasks already configured for '${configName}'`,
       details: USAGE_REDECLARE
@@ -166,7 +205,7 @@ function registerTask(configName, scriptPath, userConfig) {
     return
   }
   // remember this (existing) script, even if it fails to load
-  KNOWN_SCRIPTS.push(configName)
+  GTM._knownScripts.push(configName)
   let builder = null
   try {
     builder = require(scriptPath)
@@ -190,7 +229,7 @@ function registerTask(configName, scriptPath, userConfig) {
   // register and remember tasks
   if (builder) {
     registerTaskSet(configName, userConfig, builder)
-      .forEach(t => REGISTERED_TASKS.push(t))
+      .forEach(t => GTM._registeredTasks.push(t))
   }
 }
 
@@ -216,14 +255,14 @@ function registerTaskSet(key, configs, builder) {
         notifyMissingSource(pattern, id)
       })
       // do the actual building
-      builder(conf, tools)
+      return builder(conf, taskTools)
     })
     taskNames.push(buildId)
 
     // Register matching watch task
     if (Array.isArray(conf.watch) && conf.watch.length > 0) {
       gulp.task(watchId, function() {
-        gulp.watch(conf.watch, [buildId])
+        return gulp.watch(conf.watch, [buildId])
       })
       taskNames.push(watchId)
     }
@@ -233,29 +272,47 @@ function registerTaskSet(key, configs, builder) {
 }
 
 /**
- * Register gulp tasks 'build', 'watch', and optionally 'default'
+ * Register or update gulp tasks 'build', 'watch', and optionally 'default'
  * We might end up calling this several times (especially if using
  * the gulpTaskMaker.task method), but gulp seems to be okay with
  * overwriting a task reference with a new one.
- * @param {*} defaultTask
  */
-function registerGlobalTasks(defaultTask) {
-  let tasks = REGISTERED_TASKS
+function registerGlobalTasks() {
+  let tasks = GTM._registeredTasks
   if (tasks.length === 0) return
 
-  // Register or update tasks groups
-  gulp.task('build', tasks.filter(s => s.indexOf('build') === 0))
-  gulp.task('watch', tasks.filter(s => s.indexOf('watch') === 0))
+  // push task name to the start of the list
+  const remember = name => {
+    if (GTM._registeredTasks.indexOf(name) === -1) {
+      GTM._registeredTasks = [name].concat(GTM._registeredTasks)
+    }
+  }
 
+  // Register or update tasks groups
+  if (GTM.watchTask) {
+    gulp.task(GTM.watchTask, tasks.filter(s => s.indexOf('watch') === 0))
+    remember(GTM.watchTask)
+  }
+  if (GTM.buildTask) {
+    gulp.task(GTM.buildTask, tasks.filter(s => s.indexOf('build') === 0))
+    remember(GTM.buildTask)
+  }
   // Register the default task if defined and valid
-  if (typeof defaultTask === 'function') {
-    gulp.task('default', defaultTask)
+  if (typeof GTM.defaultTask === true && GTM.buildTask) {
+    gulp.task('default', [GTM.buildTask])
+    remember('default')
   }
-  else if (Array.isArray(defaultTask) && defaultTask.length > 0) {
-    gulp.task('default', defaultTask)
+  else if (typeof GTM.defaultTask === 'function') {
+    gulp.task('default', GTM.defaultTask)
+    remember('default')
   }
-  else if (typeof defaultTask === 'string') {
-    gulp.task('default', [defaultTask])
+  else if (Array.isArray(GTM.defaultTask) && GTM.defaultTask.length > 0) {
+    gulp.task('default', GTM.defaultTask)
+    remember('default')
+  }
+  else if (typeof GTM.defaultTask === 'string') {
+    gulp.task('default', [GTM.defaultTask])
+    remember('default')
   }
 }
 
@@ -334,18 +391,27 @@ function normalizeSrc(conf) {
  * @returns {boolean}
  */
 function validateConfig(configName, conf) {
-  if (typeof conf.dest === 'string' && Array.isArray(conf.src) && conf.src.length > 0) {
-    return true;
+  let error = ''
+  if (typeof conf.dest !== 'string') {
+    error += 'Error: \'dest\' property must be a string.\n'
   }
-  else {
-    showError({
-      message: `Invalid '${configName}' config object`,
-      details: JSON.stringify(conf, null, 2)
-        .replace(/^{\n {2}/, '{ ')
-        .replace(/\n}$/, ' }')
-    })
-    return false
+  if (!Array.isArray(conf.src) || conf.src.length === 0) {
+    error += 'Error: \'src\' property is empty\n'
   }
+  if (error === '') {
+    return true
+  }
+  // build a flatter version than JSON.stringify only
+  const printable = []
+  for (const key of Object.getOwnPropertyNames(conf)) {
+    let value = JSON.stringify(conf[key],null,0)
+    printable.push(`  "${key}": ${value}`)
+  }
+  showError({
+    message: `Invalid config object for '${configName}'`,
+    details: error + '{\n' + printable.join(',\n') + '\n}'
+  })
+  return false
 }
 
 /**
