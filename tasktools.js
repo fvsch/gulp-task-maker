@@ -72,30 +72,34 @@ function logSize(dir) {
  */
 function commonBuilder(config, transforms) {
   if (!Array.isArray(transforms)) { transforms = [] }
-  const destRoot = path.extname(config.dest) !== '' ? path.dirname(config.dest) : config.dest
+  const destRoot = path.extname(config.dest) !== ''
+    ? path.dirname(config.dest)
+    : config.dest
 
   // sourcemaps off by default: not all file formats can use them!
-  let doMaps = Boolean(config.sourcemaps), destMaps = '.'
-  if (typeof config.sourcemaps === 'string') {
-    doMaps = true; destMaps = config.sourcemaps
-  }
+  const doMaps = Boolean(config.sourcemaps)
+  const destMaps = doMaps && typeof config.sourcemaps === 'string'
+    ? config.sourcemaps
+    : '.'
 
   // create plumbed stream, init sourcemaps
-  let stream = gulp.src(config.src)
-    .pipe( plumber(notify) )
-    .pipe( gulpif(doMaps, sourcemaps.init()) )
+  let stream = gulp.src(config.src).pipe( plumber(notify) )
+  if (doMaps) {
+    stream = stream.pipe(sourcemaps.init())
+  }
 
   // insert source transforms in the middle
   for (let t of transforms) {
     // check that it does look like a Transform stream
-    if (typeof t === 'object' && t !== null && t.readable === true && t.writable === true) {
+    if (t !== null && typeof t === 'object' && t.readable === true && t.writable === true) {
       stream = stream.pipe(t)
     }
   }
 
   // log file sizes, write files and sourcemaps
-  return stream
-    .pipe( logSize(destRoot) )
-    .pipe( gulpif(doMaps, sourcemaps.write(destMaps)) )
-    .pipe( gulp.dest(destRoot) )
+  stream = stream.pipe(logSize(destRoot))
+  if (doMaps) {
+    stream = stream.pipe(sourcemaps.write(destMaps))
+  }
+  return stream.pipe( gulp.dest(destRoot) )
 }
