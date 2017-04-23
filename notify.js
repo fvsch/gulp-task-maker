@@ -46,14 +46,19 @@ module.exports = function notify(err) {
   }
 
   // Show error in console
-  gutil.log(color(message),
-    details ? ('\n' + details).replace(/\n/g, '\n  ') : '')
+  gutil.log(
+    color(message),
+    details ? ('\n' + details).replace(/\n/g, '\n  ') : ''
+  )
 
   // And in system notifications if we can (for errors only)
-  const envSetting = process.env.NODE_NOTIFIER || process.env.node_notifier || '0'
-  const showAlert = ['1','true','on'].indexOf(envSetting) !== -1
-  if (showAlert && !err.warn) {
-    notifier.notify({
+  if (!err.warn) {
+    const notifySetting = (process.env.NOTIFY
+      || process.env.notify
+      || process.env.NODE_NOTIFIER
+      || process.env.node_notifier
+      || '0').toLowerCase()
+    if (['1','true','on'].indexOf(notifySetting) !== -1) notifier.notify({
       title: header,
       message: message.replace(/\s*\n\s*/g, ' ')
     })
