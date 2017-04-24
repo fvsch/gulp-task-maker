@@ -59,7 +59,7 @@ function logSize(dir) {
   return size({
     showFiles: true,
     showTotal: false,
-    title: 'Writing → ' + dir + '/'
+    title: 'Writing → ' + typeof dir === 'string' ? dir + '/' : ''
   })
 }
 
