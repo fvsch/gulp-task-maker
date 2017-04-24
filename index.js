@@ -25,6 +25,7 @@ module.exports = {
  * @property {*} defaultTask - value to use (string, array, function…) for the 'default' task
  * @property {Array} _knownScripts - maintain a list of already registered scripts
  * @property {Array} _registeredTasks - maintain a list of already registered tasks
+ * @property {Map} _missingDependencies - maintain a list of tasks’ failed dependencies
  */
 const GTM = {
   buildTask: 'build',
@@ -32,6 +33,7 @@ const GTM = {
   defaultTask: true,
   _knownScripts: [],
   _registeredTasks: [],
+  _missingDependencies: new Map()
 }
 
 /**
@@ -140,14 +142,11 @@ function loadTasks(taskDir, tasksConfig) {
 
   if (realDir && isObject(tasksConfig)) {
     // register individual tasks
-    for (const key of Object.getOwnPropertyNames(tasksConfig)) {
+    for (const key of Object.keys(tasksConfig)) {
       registerTask(key, path.join(realDir, key + '.js'), tasksConfig[key])
     }
     // register 'build', 'watch' and 'default' tasks
     registerGlobalTasks()
-  }
-  else {
-    process.exitCode = 1
   }
 }
 
@@ -224,12 +223,12 @@ function registerTask(configName, scriptPath, userConfig) {
     if (!handled) {
       showError({ message: err.message || err.toString() })
     }
-    return
   }
   // register and remember tasks
   if (builder) {
-    registerTaskSet(configName, userConfig, builder)
-      .forEach(t => GTM._registeredTasks.push(t))
+    registerTaskSet(configName, userConfig, builder).forEach(t => {
+      GTM._registeredTasks.push(t)
+    })
   }
 }
 
@@ -279,7 +278,6 @@ function registerTaskSet(key, configs, builder) {
  */
 function registerGlobalTasks() {
   let tasks = GTM._registeredTasks
-  if (tasks.length === 0) return
 
   // push task name to the start of the list
   const remember = name => {
@@ -290,11 +288,23 @@ function registerGlobalTasks() {
 
   // Register or update tasks groups
   if (GTM.watchTask) {
-    gulp.task(GTM.watchTask, tasks.filter(s => s.indexOf('watch') === 0))
+    const watchers = tasks.filter(s => s.indexOf('watch') === 0)
+    gulp.task(GTM.watchTask, watchers, function(){
+      if (watchers.length === 0) showError({
+        warn: true, message: 'No watch tasks found'
+      })
+      showLoadingErrors()
+    })
     remember(GTM.watchTask)
   }
   if (GTM.buildTask) {
-    gulp.task(GTM.buildTask, tasks.filter(s => s.indexOf('build') === 0))
+    const builders = tasks.filter(s => s.indexOf('build') === 0)
+    gulp.task(GTM.buildTask, builders, function() {
+      if (builders.length === 0) showError({
+        warn: true, message: 'No build tasks found'
+      })
+      showLoadingErrors()
+    })
     remember(GTM.buildTask)
   }
   // Register the default task if defined and valid
@@ -403,7 +413,7 @@ function validateConfig(configName, conf) {
   }
   // build a flatter version than JSON.stringify only
   const printable = []
-  for (const key of Object.getOwnPropertyNames(conf)) {
+  for (const key of Object.keys(conf)) {
     let value = JSON.stringify(conf[key],null,0)
     printable.push(`  "${key}": ${value}`)
   }
@@ -423,25 +433,53 @@ function validateConfig(configName, conf) {
  * @return {Array} missing dependencies' names
  */
 function checkDependencies(configName, scriptPath) {
-  const missing = []
-  let deps = {}
-  try { deps = require(scriptPath.replace(/\.js$/, '.json')).dependencies || {} }
-  catch(e) {}
-  for (const key of Object.getOwnPropertyNames(deps)) {
-    try { require(key) }
-    catch(err) {
-      if (err.code === 'MODULE_NOT_FOUND') {
-        missing.push({name: key, version: deps[key]})
-      }
-    }
+  let dependencies = {}
+  const missing = {}
+  try {
+    const json = require(scriptPath.replace(/\.js$/, '.json')).dependencies || {}
+    if (isObject(json)) dependencies = json
   }
-  // Print information we found
-  if (missing.length !== 0) {
-    const installList = missing.map(m => `"${m.name}@${m.version}"`).join(' ')
-    showError({
-      message: `Missing dependencies for '${configName}'`,
-      details: `Install with: npm install -D ${installList}\n`
+  catch(e) {}
+  for (const key of Object.keys(dependencies)) {
+    try { require(key) }
+    catch(e) { if (e.code === 'MODULE_NOT_FOUND') missing[key] = dependencies[key] }
+  }
+  const names = Object.keys(missing)
+  if (names.length !== 0) {
+    // Add to global list of dependencies
+    names.forEach(name => {
+      if (!GTM._missingDependencies.has(name)) {
+        GTM._missingDependencies.set(name, missing[name])
+      }
     })
   }
-  return missing.map(m => m.name)
+  return names
+}
+
+/**
+ * Show errors which occurred when first loading a task's script.
+ * - The GTM._missingDependencies map is populated when loading each script
+ * - Then at the end of the 'build' and 'watch' tasks, we show this recap
+ *   with instructions on how to install all missing dependencies at once.
+ */
+function showLoadingErrors() {
+  for (const info of GTM._taskScripts.entries()) {
+    const name = info[0], script = info[1].path
+    for (const err of info[1].errors) {
+      showError({
+        name:
+      })
+    }
+  }
+  const missing = []
+  for (const item of GTM._missingDependencies.entries()) {
+    missing.push('"' + item.join('@') + '"')
+  }
+  console.log(GTM._taskScripts)
+  if (missing.length !== 0) {
+    showError({
+      message: `Install missing task dependencies`,
+      details: `\nnpm install -D ${missing.join(' ')}\n`
+    })
+  }
 }
