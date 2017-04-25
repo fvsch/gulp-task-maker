@@ -20,18 +20,10 @@ module.exports = function notify(err) {
     if (typeof err.plugin === 'string') {
       header = err.plugin + ' error'
     }
-    if (err.title) {
-      message = err.title
-      details = (err.message || err.formatted || '')
-      if (err.details) {
-        details = details + (details ? '\n' : '') + err.details
-      }
-    } else {
-      message = (err.message || err.formatted || '')
-      if (err.details) {
-        if (!message) message = err.details
-        else details = err.details
-      }
+    message = (err.message || err.formatted || '')
+    if (err.details) {
+      if (!message) message = err.details
+      else details = err.details
     }
     const file = err.file || err.filename || err.fileName
     if (file) {
@@ -47,7 +39,7 @@ module.exports = function notify(err) {
 
   // Show error in console
   gutil.log(
-    color(message),
+    color(err.plugin ? err.plugin + ': ' + message : message),
     details ? ('\n' + details).replace(/\n/g, '\n  ') : ''
   )
 

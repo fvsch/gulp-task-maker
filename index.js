@@ -23,17 +23,15 @@ module.exports = {
  * @property {string|boolean} buildTask - name to use for the global 'build' task
  * @property {string|boolean} watchTask - name to use for the global 'watch' task
  * @property {*} defaultTask - value to use (string, array, function…) for the 'default' task
- * @property {Array} _knownScripts - maintain a list of already registered scripts
- * @property {Array} _registeredTasks - maintain a list of already registered tasks
- * @property {Map} _missingDependencies - maintain a list of tasks’ failed dependencies
+ * @property {Array} _scripts - maintain a list of known scripts with status info
+ * @property {Array} _tasks - maintain a list of already registered tasks
  */
 const GTM = {
   buildTask: 'build',
   watchTask: 'watch',
   defaultTask: true,
-  _knownScripts: [],
-  _registeredTasks: [],
-  _missingDependencies: new Map()
+  _scripts: {},
+  _tasks: [],
 }
 
 /**
@@ -189,47 +187,48 @@ function loadSingle(scriptPath, taskConfig) {
  * @param {object} userConfig
  */
 function registerTask(configName, scriptPath, userConfig) {
-  if (!fs.existsSync(scriptPath)) {
-    showError({
-      message: `No script found for '${configName}' task(s)`,
-      details: `File not found: ${scriptPath}`
-    })
-    return
+  const info = {
+    path: scriptPath,
+    exists: false,
+    missing: [],
+    errors: []
   }
-  if (GTM._knownScripts.indexOf(configName) !== -1) {
+  if (configName in GTM._scripts) {
     showError({
       message: `Tasks already configured for '${configName}'`,
       details: USAGE_REDECLARE
     })
     return
   }
-  // remember this (existing) script, even if it fails to load
-  GTM._knownScripts.push(configName)
-  let builder = null
-  try {
-    builder = require(scriptPath)
-  }
-  catch(err) {
-    let handled = false
-    if (err.code === 'MODULE_NOT_FOUND') {
-      // print info about missing dependencies
-      const knownMissing = checkDependencies(configName, scriptPath)
-      // did we alert about that missing dependency already?
-      const moduleName = (err.message.match(/module '(.*)'/) || [null,null])[1]
-      if (moduleName && knownMissing.indexOf(moduleName) !== -1) {
-        handled = true
+  if (fs.existsSync(scriptPath)) {
+    info.exists = true
+    let builder = null
+    try {
+      builder = require(scriptPath)
+    }
+    catch(err) {
+      info.errors.push(err)
+      let handled = false
+      if (err.code === 'MODULE_NOT_FOUND') {
+        // print info about missing dependencies
+        info.missing = checkDependencies(scriptPath)
+        // did we alert about that missing dependency already?
+        const moduleName = (err.message.match(/module '(.*)'/) || [null,null])[1]
+        handled = moduleName && moduleName in info.missing
+      }
+      if (!handled) {
+        showError({ message: err.message || err.toString() })
       }
     }
-    if (!handled) {
-      showError({ message: err.message || err.toString() })
+    // register and remember tasks
+    if (builder) {
+      registerTaskSet(configName, userConfig, builder).forEach(t => {
+        GTM._tasks.push(t)
+      })
     }
   }
-  // register and remember tasks
-  if (builder) {
-    registerTaskSet(configName, userConfig, builder).forEach(t => {
-      GTM._registeredTasks.push(t)
-    })
-  }
+  // remember this script
+  GTM._scripts[configName] = info
 }
 
 /**
@@ -277,12 +276,12 @@ function registerTaskSet(key, configs, builder) {
  * overwriting a task reference with a new one.
  */
 function registerGlobalTasks() {
-  let tasks = GTM._registeredTasks
+  let tasks = GTM._tasks
 
   // push task name to the start of the list
   const remember = name => {
-    if (GTM._registeredTasks.indexOf(name) === -1) {
-      GTM._registeredTasks = [name].concat(GTM._registeredTasks)
+    if (GTM._tasks.indexOf(name) === -1) {
+      GTM._tasks = [name].concat(GTM._tasks)
     }
   }
 
@@ -428,11 +427,10 @@ function validateConfig(configName, conf) {
  * Load a task's JSON file with dependencies, try loading each dependency
  * and log the missing deps with instructions on how to install.
  * Note: we are NOT resolving version conflicts of any kind.
- * @param {string} configName
  * @param {string} scriptPath
- * @return {Array} missing dependencies' names
+ * @return {object} missing dependencies' spec (name and version)
  */
-function checkDependencies(configName, scriptPath) {
+function checkDependencies(scriptPath) {
   let dependencies = {}
   const missing = {}
   try {
@@ -444,16 +442,7 @@ function checkDependencies(configName, scriptPath) {
     try { require(key) }
     catch(e) { if (e.code === 'MODULE_NOT_FOUND') missing[key] = dependencies[key] }
   }
-  const names = Object.keys(missing)
-  if (names.length !== 0) {
-    // Add to global list of dependencies
-    names.forEach(name => {
-      if (!GTM._missingDependencies.has(name)) {
-        GTM._missingDependencies.set(name, missing[name])
-      }
-    })
-  }
-  return names
+  return missing
 }
 
 /**
@@ -463,23 +452,47 @@ function checkDependencies(configName, scriptPath) {
  *   with instructions on how to install all missing dependencies at once.
  */
 function showLoadingErrors() {
-  for (const info of GTM._taskScripts.entries()) {
-    const name = info[0], script = info[1].path
-    for (const err of info[1].errors) {
-      showError({
-        name:
-      })
+  let failedCount = 0
+  const taskStatus = {}
+  const missingDependencies = []
+
+  // Construct data for full report
+  for (const key of Object.keys(GTM._scripts)) {
+    const info = GTM._scripts[key]
+    const deps = Object.keys(info.missing)
+    // prepare task-specific message
+    let msg = ''
+    if (!info.exists) {
+      msg = 'Status: ✘ file not found'
+    }
+    else if (deps.length !== 0) {
+      msg = `Status: ✘ missing dependencies (${deps.join(', ')})`
+    }
+    else if (info.errors.length) {
+      msg = `Status: ✘ ${info.errors.map(e => e.message).join('\n')}`
+    }
+    if (msg) {
+      failedCount++
+    } else {
+      msg = 'Status: ✔︎ looks good'
+    }
+    taskStatus[key] = 'Script: ' + info.path + '\n' + msg
+    // save missing info for the npm install prompt
+    for (const name of deps) {
+      missingDependencies.push(name + '@' + info.missing[name])
     }
   }
-  const missing = []
-  for (const item of GTM._missingDependencies.entries()) {
-    missing.push('"' + item.join('@') + '"')
-  }
-  console.log(GTM._taskScripts)
-  if (missing.length !== 0) {
+
+  if (failedCount) {
+    const taskMsg = []
+    for (const key of Object.keys(taskStatus)) {
+      taskMsg.push(`[${key}]\n${taskStatus[key].split('\n').map(s => '  ' + s).join('\n')}`)
+    }
+    const depMsg = 'Install missing task dependencies with:\n' +
+      '  npm install -D "' + missingDependencies.join('" "') + '"'
     showError({
-      message: `Install missing task dependencies`,
-      details: `\nnpm install -D ${missing.join(' ')}\n`
+      message: `Failed to setup ${failedCount} configured task${failedCount > 1 ? 's' : ''}`,
+      details: `\n${taskMsg.join('\n')}\n\n${depMsg}\n`
     })
   }
 }
