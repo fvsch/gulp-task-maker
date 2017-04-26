@@ -39,7 +39,7 @@ module.exports = function notify(err) {
 
   // Show error in console
   gutil.log(
-    color(err.plugin ? err.plugin + ': ' + message : message),
+    color(err.plugin ? '['+err.plugin+'] ' + message : message),
     details ? ('\n' + details).replace(/\n/g, '\n  ') : ''
   )
 

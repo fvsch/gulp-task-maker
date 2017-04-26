@@ -25,6 +25,7 @@ module.exports = {
  * @property {*} defaultTask - value to use (string, array, function…) for the 'default' task
  * @property {Array} _scripts - maintain a list of known scripts with status info
  * @property {Array} _tasks - maintain a list of already registered tasks
+ * @property {Array} _args - the arguments gulp was called with (if we can find them)
  */
 const GTM = {
   buildTask: 'build',
@@ -32,7 +33,14 @@ const GTM = {
   defaultTask: true,
   _scripts: {},
   _tasks: [],
+  _args: getGulpArgs()
 }
+
+/**
+ * Flag to ensure we only show the main error report once
+ * @type {boolean}
+ */
+let setupErrorsShown = false
 
 /**
  * Changes to config after the gulpTaskMaker.load or gulpTaskMaker.task
@@ -41,6 +49,13 @@ const GTM = {
  * @var {boolean}
  */
 let lockConfig = false
+
+/**
+ * Populate a list of 'src' patterns that we can check later on when
+ * displaying the tasks status summary (using glob.sync)
+ * @type {Array}
+ */
+const sourcePatterns = []
 
 /** @var {string} usage info for several errors */
 const USAGE_INFO = `Expected usage:
@@ -112,7 +127,7 @@ function loadTasks(taskDir, tasksConfig) {
   let realDir = null
   if (typeof taskDir !== 'string') {
     showError({
-      message: `gulpTaskMaker.load: missing taskDir option`,
+      message: `load: missing taskDir option`,
       details: USAGE_INFO
     })
   }
@@ -125,7 +140,7 @@ function loadTasks(taskDir, tasksConfig) {
     }
     else {
       showError({
-        message: `gulpTaskMaker.load: taskDir doesn’t exist`,
+        message: `load: taskDir doesn’t exist`,
         details: `No such directory: ${dir}`
       })
     }
@@ -133,18 +148,22 @@ function loadTasks(taskDir, tasksConfig) {
 
   if (!isObject(tasksConfig)) {
     showError({
-      message: 'gulpTaskMaker.load: missing task config object',
+      message: 'load: missing task config object',
       details: USAGE_INFO
     })
   }
 
   if (realDir && isObject(tasksConfig)) {
-    // register individual tasks
+    // register tasks
     for (const key of Object.keys(tasksConfig)) {
       registerTask(key, path.join(realDir, key + '.js'), tasksConfig[key])
     }
-    // register 'build', 'watch' and 'default' tasks
     registerGlobalTasks()
+    // display errors (if not running a global task)
+    const mode = getRunningMode()
+    if (mode === 'tasks' || mode === '') {
+      showLoadingErrors()
+    }
   }
 }
 
@@ -157,13 +176,13 @@ function loadSingle(scriptPath, taskConfig) {
   lockConfig = true
   if (typeof scriptPath !== 'string') {
     throw showError({
-      message: `gulpTaskMaker.task: first argument must be a string`,
+      message: `task: first argument must be a string`,
       details: USAGE_INFO
     })
   }
   if (!isObject(taskConfig)) {
     throw showError({
-      message: 'gulpTaskMaker.task: missing task config object',
+      message: 'task: missing task config object',
       details: USAGE_INFO
     })
   }
@@ -172,9 +191,14 @@ function loadSingle(scriptPath, taskConfig) {
     : path.join(process.cwd(), scriptPath)
   const key = path.basename(script, '.js')
 
-  // defer to createTask to actually load the script and register tasks
+  // register tasks
   registerTask(key, script, taskConfig)
   registerGlobalTasks()
+  // display errors (if not running a global task)
+  const mode = getRunningMode()
+  if (mode === 'tasks' || mode === '') {
+    showLoadingErrors()
+  }
 }
 
 /**
@@ -190,8 +214,9 @@ function registerTask(configName, scriptPath, userConfig) {
   const info = {
     path: scriptPath,
     exists: false,
-    missing: [],
-    errors: []
+    sources: [],
+    errors: [],
+    missingDeps: [],
   }
   if (configName in GTM._scripts) {
     showError({
@@ -207,19 +232,19 @@ function registerTask(configName, scriptPath, userConfig) {
       builder = require(scriptPath)
     }
     catch(err) {
-      info.errors.push(err)
-      let handled = false
-      if (err.code === 'MODULE_NOT_FOUND') {
-        // print info about missing dependencies
-        info.missing = checkDependencies(scriptPath)
-        // did we alert about that missing dependency already?
-        const moduleName = (err.message.match(/module '(.*)'/) || [null,null])[1]
-        handled = moduleName && moduleName in info.missing
+      // always check dependencies if a task failed, even if the error was different
+      info.missingDeps = checkDependencies(scriptPath)
+      // do nothing more if the error was about a documented dependency
+      let module = null
+      if (err.code === 'MODULE_NOT_FOUND' && typeof err.message === 'string') {
+        module = (err.message.match(/module '(.*)'/) || [null,null])[1]
       }
-      if (!handled) {
-        showError({ message: err.message || err.toString() })
+      if (typeof module !== 'string' || module in info.missingDeps === false) {
+        info.errors.push(err)
       }
     }
+    // save script info
+    GTM._scripts[configName] = info
     // register and remember tasks
     if (builder) {
       registerTaskSet(configName, userConfig, builder).forEach(t => {
@@ -227,8 +252,6 @@ function registerTask(configName, scriptPath, userConfig) {
       })
     }
   }
-  // remember this script
-  GTM._scripts[configName] = info
 }
 
 /**
@@ -246,22 +269,16 @@ function registerTaskSet(key, configs, builder) {
     const buildId = 'build-' + id
     const watchId = 'watch-' + id
 
+    // save normalized sources, to be checked later
+    GTM._scripts[key].sources = conf.src
+
     // Register build task
-    gulp.task(buildId, function() {
-      // notify about paths or patterns that match no files
-      conf.src.forEach(function(pattern) {
-        notifyMissingSource(pattern, id)
-      })
-      // do the actual building
-      return builder(conf, taskTools)
-    })
+    gulp.task(buildId, () => builder(conf, taskTools))
     taskNames.push(buildId)
 
     // Register matching watch task
     if (Array.isArray(conf.watch) && conf.watch.length > 0) {
-      gulp.task(watchId, function() {
-        return gulp.watch(conf.watch, [buildId])
-      })
+      gulp.task(watchId, () => gulp.watch(conf.watch, [buildId]))
       taskNames.push(watchId)
     }
   })
@@ -307,12 +324,15 @@ function registerGlobalTasks() {
     remember(GTM.buildTask)
   }
   // Register the default task if defined and valid
-  if (typeof GTM.defaultTask === true && GTM.buildTask) {
+  if (GTM.defaultTask === true && GTM.buildTask) {
     gulp.task('default', [GTM.buildTask])
     remember('default')
   }
   else if (typeof GTM.defaultTask === 'function') {
-    gulp.task('default', GTM.defaultTask)
+    gulp.task('default', function(){
+      showLoadingErrors()
+      return GTM.defaultTask()
+    })
     remember('default')
   }
   else if (Array.isArray(GTM.defaultTask) && GTM.defaultTask.length > 0) {
@@ -334,26 +354,6 @@ function showError(err) {
 }
 
 /**
- * Check that a glob patterns actually matches at least one file,
- * and notify users otherwise.
- * @param {string} pattern - glob pattern
- * @param {string} taskId
- */
-function notifyMissingSource(pattern, taskId) {
-  glob(pattern, (err, found) => {
-    if (err) {
-      showError(typeof err === 'string' ? { message: err } : err)
-    }
-    else if (found.length === 0) {
-      showError({
-        warn: true,
-        message: `Missing ${taskId} sources: ${pattern}`
-      })
-    }
-  })
-}
-
-/**
  * Take the user's task config (which can be a single object,
  * or an array of config objects), and return an array of complete
  * and normalized config objects.
@@ -363,9 +363,9 @@ function notifyMissingSource(pattern, taskId) {
  */
 function normalizeUserConfig(configName, userConfig) {
   if (!isObject(userConfig)) {
-    showError({
-      message: `Invalid config object for '${configName}'`,
-      details: `Config type: ${typeof userConfig}`
+    GTM._scripts[configName].errors.push({
+      message: `Invalid config object for '${configName}'.\n` +
+        'Expected an array or object; received a ' + typeof userConfig
     })
     return []
   }
@@ -400,25 +400,29 @@ function normalizeSrc(conf) {
  * @returns {boolean}
  */
 function validateConfig(configName, conf) {
-  let error = ''
+  let errors = []
   if (typeof conf.dest !== 'string') {
-    error += 'Error: \'dest\' property must be a string.\n'
+    errors.push('\'dest\' property must be a string')
   }
   if (!Array.isArray(conf.src) || conf.src.length === 0) {
-    error += 'Error: \'src\' property is empty\n'
+    errors.push('\'src\' property is empty')
   }
-  if (error === '') {
+  if (errors.length === 0) {
     return true
   }
   // build a flatter version than JSON.stringify only
   const printable = []
   for (const key of Object.keys(conf)) {
     let value = JSON.stringify(conf[key],null,0)
-    printable.push(`  "${key}": ${value}`)
+    printable.push(`"${key}": ${value}`)
   }
-  showError({
-    message: `Invalid config object for '${configName}'`,
-    details: error + '{\n' + printable.join(',\n') + '\n}'
+  // save error for displaying later
+  GTM._scripts[configName].errors.push({
+    message: `Invalid config object for '${configName}'\n${
+      errors.join('\n')
+    }\n{ ${
+      printable.join(',\n  ')  
+    } }`
   })
   return false
 }
@@ -452,6 +456,9 @@ function checkDependencies(scriptPath) {
  *   with instructions on how to install all missing dependencies at once.
  */
 function showLoadingErrors() {
+  if (setupErrorsShown) {
+    return
+  }
   let failedCount = 0
   const taskStatus = {}
   const missingDependencies = []
@@ -459,40 +466,95 @@ function showLoadingErrors() {
   // Construct data for full report
   for (const key of Object.keys(GTM._scripts)) {
     const info = GTM._scripts[key]
-    const deps = Object.keys(info.missing)
+    const deps = Object.keys(info.missingDeps)
     // prepare task-specific message
-    let msg = ''
+    const messages = []
     if (!info.exists) {
-      msg = 'Status: ✘ file not found'
+      messages.push('✘ Could not find task script')
     }
-    else if (deps.length !== 0) {
-      msg = `Status: ✘ missing dependencies (${deps.join(', ')})`
+    if (deps.length !== 0) {
+      messages.push('✘ Missing dependencies: ' + deps.join(', '))
     }
-    else if (info.errors.length) {
-      msg = `Status: ✘ ${info.errors.map(e => e.message).join('\n')}`
+    for (const src of info.sources) {
+      const found = glob.sync(src)
+      if (found.length === 0) {
+        messages.push('✘ Missing source file(s): ' + src)
+      }
     }
-    if (msg) {
+    for (const error of info.errors) {
+      let msg = error.message || error.toString()
+      let stack = error.stack || error.stackTrace
+      if (typeof stack === 'string') {
+        if (stack.indexOf(msg)) msg = stack
+        else msg = msg + '\n' + stack
+      }
+      messages.push(
+        '✘ ' + (msg.startsWith('Error') ? '' : 'Error: ') +
+        msg.replace(/\n/g, '\n  ')
+      )
+    }
+    if (messages.length !== 0) {
       failedCount++
-    } else {
-      msg = 'Status: ✔︎ looks good'
     }
-    taskStatus[key] = 'Script: ' + info.path + '\n' + msg
-    // save missing info for the npm install prompt
+    taskStatus[key] = [
+      (info.exists ? '✔︎ ' : '✘ ') + info.path
+    ].concat(messages)
+    // prepare missing info for the npm install prompt
     for (const name of deps) {
-      missingDependencies.push(name + '@' + info.missing[name])
+      missingDependencies.push(name + '@' + info.missingDeps[name])
     }
   }
 
   if (failedCount) {
     const taskMsg = []
     for (const key of Object.keys(taskStatus)) {
-      taskMsg.push(`[${key}]\n${taskStatus[key].split('\n').map(s => '  ' + s).join('\n')}`)
+      taskMsg.push(`[${key}]\n  ${
+        taskStatus[key].join('\n').replace(/\n/g, '\n  ')
+      }`)
     }
-    const depMsg = 'Install missing task dependencies with:\n' +
-      '  npm install -D "' + missingDependencies.join('" "') + '"'
+    let fullMsg = taskMsg.join('\n')
+    if (missingDependencies.length !== 0) {
+      fullMsg += '\n\nInstall missing task dependencies with:\n' +
+        '  npm install -D "' + missingDependencies.join('" "') + '"\n'
+    }
     showError({
-      message: `Failed to setup ${failedCount} configured task${failedCount > 1 ? 's' : ''}`,
-      details: `\n${taskMsg.join('\n')}\n\n${depMsg}\n`
+      message: `Error(s) in ${failedCount} configured task${failedCount > 1 ? 's' : ''}`,
+      details: fullMsg
     })
+    // only set this flag if we have already shown some errors
+    setupErrorsShown = true
   }
+}
+
+/**
+ * Try to find the arguments used with gulp
+ * @return {Array}
+ */
+function getGulpArgs() {
+  // try to find the arguments used with gulp
+  const gulpArgs = []
+  if (Array.isArray(process.argv)) {
+    let found = false
+    for (const arg of process.argv) {
+      if (found) {
+        gulpArgs.push(arg)
+      } else {
+        found = arg === 'gulp' || /[\\\/]gulp(\.js)?$/.test(arg)
+      }
+    }
+  }
+  return gulpArgs
+}
+
+/**
+ * Check if we’re running Gulp for a 'global' task,
+ * which includes the build and watch task, the default task,
+ * and the --tasks option.
+ * @return {string}
+ */
+function getRunningMode() {
+  if (GTM._args.indexOf(GTM.buildTask) !== -1) return 'build'
+  if (GTM._args.indexOf(GTM.watchTask) !== -1) return 'watch'
+  if (GTM._args.indexOf('--tasks') !== -1) return 'tasks'
+  return ''
 }
