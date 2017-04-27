@@ -31,4 +31,5 @@ const minjs = {
   dest: 'dist/output.js'
 }
 
-gtm.load('tasks', { mincss, minjs })
+gtm.load('tasks', { mincssLol:mincss, minjs })
+console.log(gtm.status())

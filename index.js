@@ -1,16 +1,17 @@
 'use strict'
 
+const colors = require('gulp-util').colors
 const fs = require('fs')
 const glob = require('glob')
 const gulp = require('gulp')
 const path = require('path')
 const notify = require('./notify.js')
 const taskTools = require('./tasktools.js')
-const isObject = obj => obj !== null && typeof obj === 'object'
 
 // Export the configuration
 module.exports = {
   config: configureTaskMaker,
+  status: function(){ return JSON.stringify(GTM) },
   load: loadTasks,
   task: loadSingle,
   tools: taskTools
@@ -50,13 +51,6 @@ let setupErrorsShown = false
  */
 let lockConfig = false
 
-/**
- * Populate a list of 'src' patterns that we can check later on when
- * displaying the tasks status summary (using glob.sync)
- * @type {Array}
- */
-const sourcePatterns = []
-
 /** @var {string} usage info for several errors */
 const USAGE_INFO = `Expected usage:
 const gtm = require('gulp-task-maker')
@@ -87,6 +81,56 @@ gtm.task('path/to/mytask.js', [
   { src: 'bar/*.js', dest: 'dist/bar.js' }
 ])
 `
+
+/**
+ * Basic workaround for typeof null === 'object'
+ * @param obj
+ * @returns {boolean}
+ */
+function isObject(obj) {
+  return obj !== null && typeof obj === 'object'
+}
+
+/**
+ * Notify error with gulp-task-maker as the plugin name
+ * @param err
+ */
+function showError(err) {
+  return notify(Object.assign({ plugin: 'gulp-task-maker' }, err))
+}
+
+/**
+ * Try to find the arguments used with gulp
+ * @return {Array}
+ */
+function getGulpArgs() {
+  // try to find the arguments used with gulp
+  const gulpArgs = []
+  if (Array.isArray(process.argv)) {
+    let found = false
+    for (const arg of process.argv) {
+      if (found) {
+        gulpArgs.push(arg)
+      } else {
+        found = arg === 'gulp' || /[\\\/]gulp(\.js)?$/.test(arg)
+      }
+    }
+  }
+  return gulpArgs
+}
+
+/**
+ * Check if we’re running Gulp for a 'global' task,
+ * which includes the build and watch task, the default task,
+ * and the --tasks option.
+ * @return {string}
+ */
+function getRunningMode() {
+  if (GTM._args.indexOf(GTM.buildTask) !== -1) return 'build'
+  if (GTM._args.indexOf(GTM.watchTask) !== -1) return 'watch'
+  if (GTM._args.indexOf('--tasks') !== -1) return 'tasks'
+  return ''
+}
 
 /**
  * Allows users to override default configuration
@@ -204,13 +248,11 @@ function loadSingle(scriptPath, taskConfig) {
 /**
  * Load a task script and create the related gulp tasks (based on provided config).
  * This function mostly does validation of input data, and defers to registerTaskSet.
- * Side effects:
- * - adds the script path to
- * @param {string} configName
+ * @param {string} key
  * @param {string} scriptPath
  * @param {object} userConfig
  */
-function registerTask(configName, scriptPath, userConfig) {
+function registerTask(key, scriptPath, userConfig) {
   const info = {
     path: scriptPath,
     exists: false,
@@ -218,9 +260,9 @@ function registerTask(configName, scriptPath, userConfig) {
     errors: [],
     missingDeps: [],
   }
-  if (configName in GTM._scripts) {
+  if (key in GTM._scripts) {
     showError({
-      message: `Tasks already configured for '${configName}'`,
+      message: `Tasks already configured for '${key}'`,
       details: USAGE_REDECLARE
     })
     return
@@ -244,10 +286,10 @@ function registerTask(configName, scriptPath, userConfig) {
       }
     }
     // save script info
-    GTM._scripts[configName] = info
+    GTM._scripts[key] = info
     // register and remember tasks
     if (builder) {
-      registerTaskSet(configName, userConfig, builder).forEach(t => {
+      registerTaskSet(key, userConfig, builder).forEach(t => {
         GTM._tasks.push(t)
       })
     }
@@ -293,78 +335,71 @@ function registerTaskSet(key, configs, builder) {
  * overwriting a task reference with a new one.
  */
 function registerGlobalTasks() {
-  let tasks = GTM._tasks
-
-  // push task name to the start of the list
   const remember = name => {
     if (GTM._tasks.indexOf(name) === -1) {
       GTM._tasks = [name].concat(GTM._tasks)
     }
   }
+  const validTaskName = name => {
+    return typeof name === 'string' && name !== '' && /\s/.test(name) === false
+  }
+  const endGame = (empty, message) => () => {
+    if (empty) showError({warn:true, message:message})
+    showLoadingErrors()
+  }
 
-  // Register or update tasks groups
-  if (GTM.watchTask) {
-    const watchers = tasks.filter(s => s.indexOf('watch') === 0)
-    gulp.task(GTM.watchTask, watchers, function(){
-      if (watchers.length === 0) showError({
-        warn: true, message: 'No watch tasks found'
-      })
-      showLoadingErrors()
-    })
+  // Prepare the build and watch tasks
+  const builders = GTM._tasks.filter(s => s.indexOf('build') === 0)
+  const watchers = GTM._tasks.filter(s => s.indexOf('watch') === 0)
+  const buildEnd = endGame(builders.length === 0, 'No build tasks found')
+  const watchEnd = endGame(watchers.length === 0, 'No watch tasks found')
+
+  // Apply only if enabled
+  if (validTaskName(GTM.watchTask)) {
+    gulp.task(GTM.watchTask, watchers, watchEnd)
     remember(GTM.watchTask)
   }
-  if (GTM.buildTask) {
-    const builders = tasks.filter(s => s.indexOf('build') === 0)
-    gulp.task(GTM.buildTask, builders, function() {
-      if (builders.length === 0) showError({
-        warn: true, message: 'No build tasks found'
-      })
-      showLoadingErrors()
-    })
+  if (validTaskName(GTM.buildTask)) {
+    gulp.task(GTM.buildTask, builders, buildEnd)
     remember(GTM.buildTask)
   }
-  // Register the default task if defined and valid
-  if (GTM.defaultTask === true && GTM.buildTask) {
-    gulp.task('default', [GTM.buildTask])
+  if (GTM.defaultTask === true) {
+    gulp.task('default', builders, buildEnd)
     remember('default')
   }
-  else if (typeof GTM.defaultTask === 'function') {
-    gulp.task('default', function(){
-      showLoadingErrors()
-      return GTM.defaultTask()
-    })
-    remember('default')
-  }
-  else if (Array.isArray(GTM.defaultTask) && GTM.defaultTask.length > 0) {
-    gulp.task('default', GTM.defaultTask)
-    remember('default')
-  }
-  else if (typeof GTM.defaultTask === 'string') {
-    gulp.task('default', [GTM.defaultTask])
-    remember('default')
-  }
-}
 
-/**
- * Notify error with gulp-task-maker as the plugin name
- * @param err
- */
-function showError(err) {
-  return notify(Object.assign({ plugin: 'gulp-task-maker' }, err))
+  // Other possible cases for the default task
+  if (typeof GTM.defaultTask !== 'boolean') {
+    if (validTaskName(GTM.defaultTask)) {
+      gulp.task('default', [GTM.defaultTask])
+      remember('default')
+    }
+    else if (Array.isArray(GTM.defaultTask) && GTM.defaultTask.length > 0) {
+      gulp.task('default', GTM.defaultTask)
+      remember('default')
+    }
+    else if (typeof GTM.defaultTask === 'function') {
+      gulp.task('default', function () {
+        showLoadingErrors()
+        return GTM.defaultTask()
+      })
+      remember('default')
+    }
+  }
 }
 
 /**
  * Take the user's task config (which can be a single object,
  * or an array of config objects), and return an array of complete
  * and normalized config objects.
- * @param {string} configName
+ * @param {string} key
  * @param {Object|Array} userConfig
  * @returns {Array}
  */
-function normalizeUserConfig(configName, userConfig) {
+function normalizeUserConfig(key, userConfig) {
   if (!isObject(userConfig)) {
-    GTM._scripts[configName].errors.push({
-      message: `Invalid config object for '${configName}'.\n` +
+    GTM._scripts[key].errors.push({
+      message: `Invalid config object for '${key}'.\n` +
         'Expected an array or object; received a ' + typeof userConfig
     })
     return []
@@ -375,7 +410,7 @@ function normalizeUserConfig(configName, userConfig) {
     // Normalize the src and watch properties
     .map(normalizeSrc)
     // And only keep valid configs objects
-    .filter(conf => validateConfig(configName, conf))
+    .filter(conf => validateConfig(key, conf))
 }
 
 /**
@@ -384,22 +419,32 @@ function normalizeUserConfig(configName, userConfig) {
  * @returns {object}
  */
 function normalizeSrc(conf) {
-  const valid = s => typeof s === 'string' && s.trim() !== ''
-  const src = [].concat(conf.src).filter(valid)
-  const watch = conf.watch === true ? src : [].concat(conf.watch).filter(valid)
-  conf.src = src
-  conf.watch = watch
-  return conf
+  const validate = input => {
+    const valid = []
+    // keep strings, ditch duplicates
+    for (const s of [].concat(input)) {
+      const t = typeof s === 'string' ? s.trim() : ''
+      if (t !== '' && valid.indexOf(t) === -1) valid.push(t)
+    }
+    return valid
+  }
+  const src = validate(conf.src)
+  const watch = conf.watch === true ? src : validate(conf.watch)
+  // return a copy instead of mutating conf
+  return Object.assign(conf, {
+    src: src,
+    watch: watch
+  })
 }
 
 /**
  * Check that a config object is valid, show an error and drop
  * that config otherwise.
- * @param {string} configName
+ * @param {string} key
  * @param {object} conf
  * @returns {boolean}
  */
-function validateConfig(configName, conf) {
+function validateConfig(key, conf) {
   let errors = []
   if (typeof conf.dest !== 'string') {
     errors.push('\'dest\' property must be a string')
@@ -410,19 +455,10 @@ function validateConfig(configName, conf) {
   if (errors.length === 0) {
     return true
   }
-  // build a flatter version than JSON.stringify only
-  const printable = []
-  for (const key of Object.keys(conf)) {
-    let value = JSON.stringify(conf[key],null,0)
-    printable.push(`"${key}": ${value}`)
-  }
   // save error for displaying later
-  GTM._scripts[configName].errors.push({
-    message: `Invalid config object for '${configName}'\n${
-      errors.join('\n')
-    }\n{ ${
-      printable.join(',\n  ')  
-    } }`
+  GTM._scripts[key].errors.push({
+    message: `Invalid config object for '${key}'\n${ errors.join('\n') }\n`
+      + colors.grey(JSON.stringify(conf, null, 2))
   })
   return false
 }
@@ -459,7 +495,8 @@ function showLoadingErrors() {
   if (setupErrorsShown) {
     return
   }
-  let failedCount = 0
+  const CWD = process.cwd()
+  const failedTasks = []
   const taskStatus = {}
   const missingDependencies = []
 
@@ -467,6 +504,10 @@ function showLoadingErrors() {
   for (const key of Object.keys(GTM._scripts)) {
     const info = GTM._scripts[key]
     const deps = Object.keys(info.missingDeps)
+    const script = info.path.startsWith(CWD) ? info.path.replace(CWD, '.') : info.path
+    const scriptMsg = (info.exists ? '✔ ' : '✘ ') + script
+    // warning: costly sync IO operations!
+    const sources = info.sources.filter(s => glob.sync(s).length === 0)
     // prepare task-specific message
     const messages = []
     if (!info.exists) {
@@ -475,11 +516,11 @@ function showLoadingErrors() {
     if (deps.length !== 0) {
       messages.push('✘ Missing dependencies: ' + deps.join(', '))
     }
-    for (const src of info.sources) {
-      const found = glob.sync(src)
-      if (found.length === 0) {
-        messages.push('✘ Missing source file(s): ' + src)
-      }
+    if (sources.length !== 0) {
+      messages.push('✘ Missing sources: ' + (sources.length > 1
+        ? [''].concat(sources).join('\n  ')
+        : sources[1])
+      )
     }
     for (const error of info.errors) {
       let msg = error.message || error.toString()
@@ -494,18 +535,16 @@ function showLoadingErrors() {
       )
     }
     if (messages.length !== 0) {
-      failedCount++
+      failedTasks.push(key)
     }
-    taskStatus[key] = [
-      (info.exists ? '✔︎ ' : '✘ ') + info.path
-    ].concat(messages)
+    taskStatus[key] = [scriptMsg].concat(messages)
     // prepare missing info for the npm install prompt
     for (const name of deps) {
       missingDependencies.push(name + '@' + info.missingDeps[name])
     }
   }
 
-  if (failedCount) {
+  if (failedTasks.length !== 0) {
     const taskMsg = []
     for (const key of Object.keys(taskStatus)) {
       taskMsg.push(`[${key}]\n  ${
@@ -518,43 +557,10 @@ function showLoadingErrors() {
         '  npm install -D "' + missingDependencies.join('" "') + '"\n'
     }
     showError({
-      message: `Error(s) in ${failedCount} configured task${failedCount > 1 ? 's' : ''}`,
+      message: `Error${failedTasks.length > 1 ? 's' : ''} in ${failedTasks.map(s => `'${s}'`).join(', ')}`,
       details: fullMsg
     })
     // only set this flag if we have already shown some errors
     setupErrorsShown = true
   }
-}
-
-/**
- * Try to find the arguments used with gulp
- * @return {Array}
- */
-function getGulpArgs() {
-  // try to find the arguments used with gulp
-  const gulpArgs = []
-  if (Array.isArray(process.argv)) {
-    let found = false
-    for (const arg of process.argv) {
-      if (found) {
-        gulpArgs.push(arg)
-      } else {
-        found = arg === 'gulp' || /[\\\/]gulp(\.js)?$/.test(arg)
-      }
-    }
-  }
-  return gulpArgs
-}
-
-/**
- * Check if we’re running Gulp for a 'global' task,
- * which includes the build and watch task, the default task,
- * and the --tasks option.
- * @return {string}
- */
-function getRunningMode() {
-  if (GTM._args.indexOf(GTM.buildTask) !== -1) return 'build'
-  if (GTM._args.indexOf(GTM.watchTask) !== -1) return 'watch'
-  if (GTM._args.indexOf('--tasks') !== -1) return 'tasks'
-  return ''
 }

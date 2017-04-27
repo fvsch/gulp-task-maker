@@ -23,11 +23,15 @@ Helps you write gulp tasks focused on building assets, so that you can:
 Short guide to gulp-task-maker
 ------------------------------
 
-At the root of your project, install as a dependency:
+### Install
+
+At the root of your project, install `gulp` and `gulp-task-maker` as `devDependencies`:
 
 ```bash
-npm install gulp-task-maker --save-dev
+npm install -D gulp gulp-task-maker
 ```
+
+### Configure
 
 Then in your `gulpfile.js`, you could have:
 
@@ -45,7 +49,11 @@ gtm.load('gulp-tasks', {
 })
 ```
 
-This will instruct `gulp-task-maker` to load `./gulp-tasks/mytask.js`, which could look like:
+This will instruct `gulp-task-maker` to load `./gulp-tasks/mytask.js`, and pass it your configuration. Let’s see how this script might look.
+
+### Write tasks
+
+Your config in the previous step  will instruct `gulp-task-maker` to load `./gulp-tasks/mytask.js`, which could look like:
 
 ```js
 const path = require('path')
@@ -55,12 +63,12 @@ const somePlugin = require('gulp-something')
 module.exports = function mytaskBuilder(config, tools) {
   const file = path.basename(config.dest)
   const dir = path.dirname(config.dest)
-  return gulp.src(config.src)   // take some files
-    .pipe(tools.logErrors())    // tell gulp to show errors and continue
-    .pipe(tools.concat(file))   // concatenate files to just one
-    .pipe(somePlugin())         // use a gulp plugin to transform content
-    .pipe(tools.size(dir))      // log resulting file path/names and size
-    .pipe(gulp.dest(dir))       // write resulting files to destination
+  return gulp.src(config.src)      // take some files
+    .pipe(tools.logErrors())       // tell gulp to show errors and continue
+    .pipe(tools.concat(file))      // concatenate files to just one
+    .pipe(somePlugin())            // use a gulp plugin to transform content
+    .pipe(tools.size(`./{dir}/`))  // log resulting file path/names and size
+    .pipe(gulp.dest(dir))          // write resulting files to destination
 }
 ```
 
@@ -78,9 +86,54 @@ module.exports = function mytaskBuilder(config, tools) {
 }
 ```
 
-Compared to a 100% DIY gulp workflow, we gained a few things:
+Once you have a task script you like, you can easily copy it to another project that uses `gulp-task-maker`, and only change the config.
 
-- we separated the task’s logic (`gulp-tasks/mytask.js`) from the build’s config (input files’ paths, output path, and any other configuration you want), making it more portable;
-- we can provide more than one build config, as an array of objects;
-- we will get a watch task automatically;
-- we improved error handling and result reports.
+For a complete guide about writing tasks for `gulp-task-maker`, see [In depth: Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/writing-tasks.md).
+
+### 1. Run, 2. ...?, 3. Profit!
+
+Finally we can run the gulp command, and get a console output that looks like this:
+
+```sh
+$ gulp
+[13:37:21] Using gulpfile ~/Code/my-project/gulpfile.js
+[13:37:21] Starting 'build-mytask'...
+[13:37:22] ./public/ main.js 88.97 kB
+[13:37:22] Finished 'build-mytask' after 1.12 s
+[13:37:22] Starting 'default'...
+[13:37:22] Finished 'default' after 650 μs
+```
+
+Note that I’m using the global `gulp` command. If you didn’t install gulp globally (with `npm install -g gulp`), you can use it from the `node_modules` directory instead (and I’m going to use this notation from now on):
+
+```sh
+$ ./node_modules/.bin/gulp
+...
+```
+
+Gulp’s `default` task will be set to run all configured builds. You could also explicitely use the main `build` task:
+
+```sh
+$ ./node_modules/.bin/gulp build
+...
+```
+
+You could also run a specific build task, which can be useful when you have many:
+
+```sh
+$ ./node_modules/.bin/gulp build-mytask
+...
+```
+
+Or start the main `watch` task. I recommend setting the `NOTIFY` environment variable first, to enable system notifications:
+
+```sh
+$ NOTIFY=1 ./node_modules/.bin/gulp watch
+[13:37:49] Using gulpfile ~/Code/my-project/gulpfile.js
+[13:37:49] Starting 'build-mytask'...
+[13:37:49] Finished 'build-mytask' after 2.55 s
+[13:37:49] Starting 'watch'...
+[13:37:49] Finished 'default' after 4.54 ms
+```
+
+I also recommend taking a look at the [Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/configuring-tasks.md) page, which has a few `package.json` and command line tricks.

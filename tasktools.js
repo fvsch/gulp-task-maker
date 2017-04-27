@@ -3,6 +3,7 @@
 const concat = require('gulp-concat')
 const gulp = require('gulp')
 const gulpif = require('gulp-if')
+const gutil = require('gulp-util')
 const path = require('path')
 const plumber = require('gulp-plumber')
 const rename = require('gulp-rename')
@@ -52,14 +53,14 @@ function logErrors() {
 /**
  * Helper function using gulp-size to log the size and path
  * of a file we're about to to write to the filesystem.
- * @param {string} dir - path to output files
+ * @param {string} title - Title to differentiate different output
  * @return {*}
  */
-function logSize(dir) {
+function logSize(title) {
   return size({
     showFiles: true,
     showTotal: false,
-    title: 'Writing → ' + typeof dir === 'string' ? dir + '/' : ''
+    title: typeof title === 'string' ? title : ''
   })
 }
 
@@ -90,14 +91,11 @@ function commonBuilder(config, transforms) {
 
   // insert source transforms in the middle
   for (let t of transforms) {
-    // check that it does look like a Transform stream
-    if (t !== null && typeof t === 'object' && t.readable === true && t.writable === true) {
-      stream = stream.pipe(t)
-    }
+    if (gutil.isStream(t)) stream = stream.pipe(t)
   }
 
   // log file sizes, write files and sourcemaps
-  stream = stream.pipe(logSize(destRoot))
+  stream = stream.pipe(logSize(`./${destRoot}/`))
   if (doMaps) {
     stream = stream.pipe(sourcemaps.write(destMaps))
   }
