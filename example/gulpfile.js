@@ -25,11 +25,11 @@ const mincss = {
 const minjs = {
   src: [
     'node_modules/jquery/dist/jquery.js',
+    'this/one/doesnt/exist.js',
     'src/*.js'
   ],
   watch: 'src/*.js',
   dest: 'dist/output.js'
 }
 
-gtm.load('tasks', { mincssLol:mincss, minjs })
-console.log(gtm.status())
+gtm.load('tasks', { mincss, minjs })

@@ -6,10 +6,11 @@ Configuring tasks with gulp-task-maker
 * [The load and task methods](#the-load-and-task-methods)
 * [The task configuration object](#the-task-configuration-object)
 * [Multiple builds for a task](#multiple-builds-for-a-task)
-* [See what tasks are created](#see-what-tasks-are-created)
-* [Enabling system notifications](#enabling-system-notifications)
+* [The build and watch tasks](#the-build-and-watch-tasks)
+* [Errors and debugging](#errors-and-debugging)
 * [Advanced config](#advanced-config)
 * [Overriding global tasks](#overriding-global-tasks)
+* [Enabling system notifications](#enabling-system-notifications)
 
 ***
 
@@ -125,7 +126,7 @@ gtm.load('gulp-tasks', {
 })
 ```
 
-## See what tasks are created
+## The build and watch tasks
 
 `gulp-task-maker` will create one or two tasks for each valid script & config object pair:
 
@@ -151,34 +152,36 @@ $ ./node_modules/.bin/gulp --tasks
 
 Notice the `build`, and `watch` tasks; they are global shortcut tasks that run all the `build-*` or `watch-*` tasks. (`gulp-task-maker` will also configure a `default` task as an alias for `build`.)
 
-## Enabling system notifications
+## Errors and debugging
 
-`gulp-task-maker` uses system notifications, via the `node-notifier` package, to signal configuration errors. (It can also use system notifications for errors occuring when processing source files, if tasks use the `tools.logErrors` or `tools.commonBuilder`.)
+When configuring tasks, `gulp-task-maker` will suppress most errors as they happen, and try to display them all later in a compact display that may look like this:
 
-To enable system notifications, use the `NODE_NOTIFIER` or `NOTIFY` environment variables. You can do it globally in your `~/.bashrc` or similar, but I recommend using npm scripts for this.
-
-For example, your `package.json` could look like this:
-
-```json
-{
-  "scripts": {
-    "build": "cross-env NOTIFY=1 gulp build",
-    "watch": "cross-env NOTIFY=1 gulp watch"
-  },
-  "devDependencies": {
-    "cross-env": "^4.0",
-    "gulp": "^3.9",
-    "gulp-task-maker": "^1.0"
-  }
-}
+```
+[13:37:12] [gulp-task-maker] Errors in 'sometask', 'other' 
+[sometask]
+  ✔ Using ~/Code/my-project/gulp-tasks/sometask.js
+  ✘ Missing sources: 'this/one/doesnt/exist.js'
+[other]
+  ✘ Script not found! ~/Code/my-project/gulp-tasks/other.js
 ```
 
-(The `cross-env` package is used to set a command variable that works on Windows as well as *nix systems. If you only use macOS and Linux, you could ditch it.)
+There are a few options for getting more information.
 
-Now you can run the main `build` task with:
+1. If you’d rather stop the build on any config error, use the `strict` option:
 
-```sh
-npm run build
+```js
+const gtm = require('gulp-task-maker')
+gtm.conf({ strict: true })
+gtm.load('gulp-tasks', { /* … */ })
+```
+
+2. You can also use the `info` method to get an object with `gulp-task-maker`’s config, known scripts and errors:
+
+```js
+const gtm = require('gulp-task-maker')
+gtm.load('gulp-tasks', { /* … */ })
+// console.dir instead of console.log to see deeper objects
+console.dir(gtm.info(), {depth:3})
 ```
 
 ## Advanced config
@@ -190,9 +193,9 @@ We’ve seen how we can declare a system variable with `cross-env`. We could use
 ```json
 {
   "scripts": {
-    "build-prod": "cross-env NOTIFY=1 BUILD=prod gulp build",
-    "build-dev": "cross-env NOTIFY=1 BUILD=dev gulp build",
-    "watch": "cross-env NOTIFY=1 BUILD=dev gulp watch"
+    "build-prod": "cross-env BUILD=prod gulp build",
+    "build-dev": "cross-env BUILD=dev gulp build",
+    "watch": "cross-env BUILD=dev gulp watch"
   },
   "devDependencies": {
     "cross-env": "^4.0",
@@ -202,7 +205,9 @@ We’ve seen how we can declare a system variable with `cross-env`. We could use
 }
 ```
 
-And in your `gulpfile.js`:
+On the command line, you would run those shortcuts with e.g. `npm run build-dev`.
+
+Now in your `gulpfile.js`, you can use the `BUILD` environment variable to change some build settings:
 
 ```js
 const gtm = require('gulp-task-maker')
@@ -213,7 +218,9 @@ gtm.task('gulp-tasks/minjs.js', {
   watch: 'src/*.js',
   // dev build = sourcemaps, not minified
   // prod build = no sourcemaps, minified
-  dest: isDev?'dist/output.js':'dist/output.min.js',
+  dest: isDev
+    ? 'dist/output.js'
+    : 'dist/output.min.js',
   minify: !isDev,
   sourcemaps: isDev
 })
@@ -248,14 +255,14 @@ gtm.task('gulp-tasks/minjs.js', [
 
 ## Overriding global tasks
 
-You can override the global tasks (`build`, `watch` and `default`) with `gulpTaskMaker.config`:
+You can override the global tasks (`build`, `watch` and `default`) with the `conf` method:
 
 ```js
 const gtm = require('gulp-task-maker')
 
 // override the default config
 // ⚠ BEFORE any gtm.load or gtm.task
-gtm.config({
+gtm.conf({
   // override the 'build' name;
   // or set to false to disable
   buildTask: 'my-build-name',
@@ -267,15 +274,38 @@ gtm.config({
 })
 
 // or set the 'default' task to something else
-gtm.config({
+gtm.conf({
   defaultTask: ['my-build-name', 'my-watch-name', 'some-other-task']
 })
 
 // you can use a function too
-gtm.config({
+gtm.conf({
   defaultTask: function(){ /* do something, probably with gulp */ }
 })
-
-// check gulp-task-maker's config
-console.log(gtm.config())
 ```
+
+## Enabling system notifications
+
+`gulp-task-maker` uses system notifications, via the `node-notifier` package, to signal configuration errors. (It can also use system notifications for errors occuring when processing source files, if tasks use the `tools.logErrors` or `tools.commonBuilder`.)
+
+To enable system notifications, use the `NODE_NOTIFIER` or `NOTIFY` environment variables. You can do it globally in your `~/.bashrc` or similar, but I recommend using npm scripts for this.
+
+For example, your `package.json` could look like this:
+
+```json
+{
+  "scripts": {
+    "build": "cross-env NOTIFY=1 gulp build",
+    "watch": "cross-env NOTIFY=1 gulp watch"
+  },
+  "devDependencies": {
+    "cross-env": "^4.0",
+    "gulp": "^3.9",
+    "gulp-task-maker": "^1.0"
+  }
+}
+```
+
+Now you can run the main `build` task with `npm run build`.
+
+Note: the `cross-env` package is used to set a command variable that works on Windows as well as *nix systems. If you only use macOS and Linux, you could ditch it.

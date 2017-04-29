@@ -3,7 +3,7 @@
 const concat = require('gulp-concat')
 const gulp = require('gulp')
 const gulpif = require('gulp-if')
-const gutil = require('gulp-util')
+const isStream = require('gulp-util').isStream
 const path = require('path')
 const plumber = require('gulp-plumber')
 const rename = require('gulp-rename')
@@ -91,7 +91,7 @@ function commonBuilder(config, transforms) {
 
   // insert source transforms in the middle
   for (let t of transforms) {
-    if (gutil.isStream(t)) stream = stream.pipe(t)
+    if (isStream(t)) stream = stream.pipe(t)
   }
 
   // log file sizes, write files and sourcemaps

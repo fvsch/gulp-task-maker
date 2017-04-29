@@ -21,14 +21,16 @@ module.exports = function notify(err) {
       header = err.plugin + ' error'
     }
     message = (err.message || err.formatted || '')
-    if (err.details) {
-      if (!message) message = err.details
-      else details = err.details
+    if (typeof message === 'string' && message.indexOf('\n') !== -1) {
+      const sep = '__SEPARATOR__'
+      const parts = message.replace('\n', sep).split(sep, 2)
+      message = parts[0]
+      details = parts[1]
     }
     const file = err.file || err.filename || err.fileName
     if (file) {
-      const fileMsg = 'In ' + file.replace(process.cwd()+'/', '')
-      message = message ? message + '\n' + fileMsg : fileMsg
+      details += (details.length ? '\n' : '')
+        + 'In ' + file.replace(process.cwd()+'/', '')
     }
     if (typeof err.colors === 'string') {
       err.colors.split('.').forEach(name => {
@@ -40,7 +42,7 @@ module.exports = function notify(err) {
   // Show error in console
   gutil.log(
     color(err.plugin ? '['+err.plugin+'] ' + message : message),
-    details ? ('\n' + details).replace(/\n/g, '\n') : ''
+    details ? ('\n' + details).replace(/\n/g, '\n  ') : ''
   )
 
   // And in system notifications if we can (for errors only)
