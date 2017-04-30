@@ -1,8 +1,6 @@
 gulp-task-maker
 ===============
 
-⚠ Requires Node.js 4 or later.
-
 Helps you write gulp tasks focused on building assets, so that you can:
 
 1. Separate task configuration and implementation.
@@ -11,6 +9,8 @@ Helps you write gulp tasks focused on building assets, so that you can:
 4. Improve developer usability by logging what gets written to disk, use system notifications for errors, etc.
 
 `gulp-task-maker` also bundles useful gulp plugins such as `gulp-sourcemaps`, `gulp-if` and `gulp-concat`, and provides a `commonBuilder` helper function that takes care of logging and sourcemaps, reducing boilerplate between tasks.
+
+⚠ Requires Node.js 4 or later.
 
 *Documentation:*
 
@@ -125,10 +125,10 @@ $ ./node_modules/.bin/gulp build-mytask
 ...
 ```
 
-Or start the main `watch` task. I recommend setting the `NOTIFY` environment variable first, to enable system notifications:
+Or start the main `watch` task. I recommend setting the `GTM_NOTIFY` environment variable first, to enable system notifications:
 
 ```sh
-$ NOTIFY=1 ./node_modules/.bin/gulp watch
+$ GTM_NOTIFY=1 ./node_modules/.bin/gulp watch
 [13:37:49] Using gulpfile ~/Code/my-project/gulpfile.js
 [13:37:49] Starting 'build-mytask'...
 [13:37:49] Finished 'build-mytask' after 2.55 s

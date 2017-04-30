@@ -288,7 +288,7 @@ gtm.conf({
 
 `gulp-task-maker` uses system notifications, via the `node-notifier` package, to signal configuration errors. (It can also use system notifications for errors occuring when processing source files, if tasks use the `tools.logErrors` or `tools.commonBuilder`.)
 
-To enable system notifications, use the `NODE_NOTIFIER` or `NOTIFY` environment variables. You can do it globally in your `~/.bashrc` or similar, but I recommend using npm scripts for this.
+To enable system notifications, use the `GTM_NOTIFY` environment variable. You can do it globally in your `~/.bashrc` or similar, but I recommend using npm scripts for this.
 
 For example, your `package.json` could look like this:
 

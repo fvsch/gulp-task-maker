@@ -1,96 +1,36 @@
 'use strict'
-
 const fs = require('fs')
 const glob = require('glob')
 const gulp = require('gulp')
 const path = require('path')
 const notify = require('./notify.js')
-const taskTools = require('./tasktools.js')
+const shared = require('./shared.js')
+const tools = require('./tools.js')
 
-/**
- * @var {object} _conf - gulp-task-maker options
- * @property {boolean} debug - whether to throw errors or log them after the fact
- * @property {string|boolean} buildTask - name to use for the global 'build' task
- * @property {string|boolean} watchTask - name to use for the global 'watch' task
- * @property {*} defaultTask - value to use (string, array, function…) for the 'default' task
- */
-const _conf = {}
+// shorter references to common state
+const _conf = shared.config
+const _flags = shared.flags
+const _scripts = shared.scripts
+const _tasks = shared.tasks
 
-/**
- * Boolean flags to lock some features
- * @type {object}
- * @property {boolean} errorsShown - ensure we only show the main error report once
- * @property {boolean} optionsLocked - avoid registering the 'build' and 'watch' tasks under several names
- */
-const _flags = {
-  errorsShown: false,
-  optionsLocked: false
-}
-
-/**
- * List of known scripts with status info
- * @type {object}
- */
-const _scripts = {}
-
-/**
- * List of already registered tasks
- * @type {Array}
- */
-const _tasks = []
-
-/**
- * Usage info for several errors
- * @var {string}
- */
-const USAGE_INFO = `Expected usage:
-const gtm = require('gulp-task-maker')
-
-// set up with the task directory path
-gtm.load('path/to/tasks', {
-  mytask: { … },
-  othertask: { … }
-})
-
-// or set up a single task
-gtm.task('path/to/tasks/something.js', { … })`
-
-/**
- * Usage info for redeclared tasks
- * @type {string}
- */
-const USAGE_REDECLARE = `This error happens when you’re trying to configure
-the same task several times with gulp-task-maker.
-Make sure you are not redeclaring the same task script.
-
-// Usage for declaring a script with several builds:
-const gtm = require('gulp-task-maker')
-
-// bad, will fail!
-gtm.task('path/to/mytask.js', { src: 'foo/*.js', dest: 'dist/foo.js' })
-gtm.task('path/to/mytask.js', { src: 'bar/*.js', dest: 'dist/bar.js' })
-
-// do this instead:
-gtm.task('path/to/mytask.js', [
-  { src: 'foo/*.js', dest: 'dist/foo.js' },
-  { src: 'bar/*.js', dest: 'dist/bar.js' }
-])`
-
-// populate _conf
+// read start configuration from environment vars
 configure({
-  buildTask: 'build',
-  watchTask: 'watch',
-  defaultTask: true,
-  strict: false
+  strict: strToBool(
+    process.env.GTM_STRICT ||
+    process.env.gtm_strict, '0'),
+  notify: strToBool(
+    process.env.GTM_NOTIFY ||
+    process.env.gtm_notifY ||
+    process.env.NODE_NOTIFIER ||
+    process.env.node_notifier, '0')
 })
 
-// export
 module.exports = {
   conf: configure,
-  info: getDebugInfo,
+  info: shared.copyState,
   load: loadTasks,
   task: loadSingle,
-  tools: taskTools,
+  tools: tools
 }
 
 /**
@@ -103,54 +43,70 @@ function isObject(obj) {
 }
 
 /**
- * Store an error for later, log it instantly or throw if groupErrors is false
+ * Check if a string looks like a positive word
+ * Use for feature flags in environment variables (so they can be set as '1', 'on', etc.)
+ * @param {string} [test]
+ * @param {string} [fallback]
+ * @returns {boolean}
+ */
+function strToBool(test, fallback) {
+  const s = String(test || fallback || '').trim().toLowerCase()
+  return ['1','true','on','yes'].indexOf(s) !== -1
+}
+
+/**
+ * Store an error for later, log it instantly or throw if in strict mode
  * @param {object} err - error object
  * @param {Array} [store] - where to store the error for later
  */
 function handleError(err, store) {
-  const hasStore = Array.isArray(store)
-  if (!err.plugin) err.plugin = 'gulp-task-maker'
-  if (_conf.strict) throw err
-  else {
-    if (hasStore) store.push(err)
-    else notify(err)
+  const later = Array.isArray(store) && _conf.strict === false
+  if (err && !err.plugin) {
+    err.plugin = 'gulp-task-maker'
   }
+  if (later) store.push(err)
+  else notify(err)
 }
 
 /**
  * Allows users to override default configuration
- * @param {object} [config] - options, or undefined to return the current config
- * @param {string|boolean} [config.buildTask] - name to use for the main build task, false to disable
- * @param {string|boolean} [config.watchTask] - name to use for the main watch task, false to disable
- * @param {*} [config.defaultTask] - value for the default task, false to disable
- * @param {boolean} [config.strict] - throw errors or log them afterwards
+ * @param {object} [settings] - options, or undefined to return the current config
+ * @param {string|boolean} [settings.buildTask] - name to use for the main build task, false to disable
+ * @param {string|boolean} [settings.watchTask] - name to use for the main watch task, false to disable
+ * @param {*} [settings.defaultTask] - value for the default task, false to disable
+ * @param {boolean} [settings.strict] - throw errors or log them afterwards
+ * @param {boolean} [settings.notify] - enable system notifications
  * @return {object}
  */
-function configure(config) {
+function configure(settings) {
   // make a shallow copy of config, should not contain a reference
   // unless the defaultTask was set to an array, object or function by user
   const copy = () => Object.assign(Object.create(null), _conf)
-  if (!isObject(config)) return copy()
+  if (!isObject(settings)) return copy()
   if (_flags.optionsLocked === true) {
     handleError(
       new Error('gulp-task-maker configuration cannot be changed at this point\n' +
-      'The `gulpTaskMaker.conf` method cannot be called after any use of `gulpTaskMaker.load` or `gulpTaskMaker.task`.')
+        'The `gulpTaskMaker.conf` method cannot be called after ' +
+        'any use of `gulpTaskMaker.load` or `gulpTaskMaker.task`.')
     )
     return copy()
   }
-  if (typeof config.strict === 'boolean') {
-    _conf.strict = config.strict
-    const action = config.strict ? 'removeListener' : 'on'
+  if (typeof settings.strict === 'boolean') {
+    _conf.strict = settings.strict
+    const action = settings.strict ? 'removeListener' : 'on'
     process[action]('exit', showLoadingErrors)
   }
-  if (typeof config.buildTask === 'string' || config.buildTask === false) {
-    _conf.buildTask = config.buildTask
+  if (typeof settings.notify === 'boolean') {
+    _conf.notify = settings.notify
   }
-  if (typeof config.watchTask === 'string' || config.watchTask === false) {
-    _conf.watchTask = config.watchTask
+  if (typeof settings.buildTask === 'string' || settings.buildTask === false) {
+    _conf.buildTask = settings.buildTask
   }
-  if (typeof config.defaultTask !== 'undefined') {
-    _conf.defaultTask = config.defaultTask
+  if (typeof settings.watchTask === 'string' || settings.watchTask === false) {
+    _conf.watchTask = settings.watchTask
+  }
+  if (typeof settings.defaultTask !== 'undefined') {
+    _conf.defaultTask = settings.defaultTask
   }
   return copy()
 }
@@ -164,12 +120,12 @@ function loadTasks(taskDir, tasksConfig) {
   _flags.optionsLocked = true
   if (typeof taskDir !== 'string') {
     return handleError(
-      new Error(`load: missing taskDir option\n${USAGE_INFO}`)
+      new Error(`load: missing taskDir option\n${_conf.USAGE_INFO}`)
     )
   }
   if (!isObject(tasksConfig)) {
     return handleError(
-      new Error(`load: missing task config object\n${USAGE_INFO}`)
+      new Error(`load: missing task config object\n${_conf.USAGE_INFO}`)
     )
   }
   const dir = path.isAbsolute(taskDir)
@@ -197,12 +153,12 @@ function loadSingle(scriptPath, taskConfig) {
   _flags.optionsLocked = true
   if (typeof scriptPath !== 'string') {
     return handleError(
-      new Error(`task: first argument must be a string\n${USAGE_INFO}`)
+      new Error(`task: first argument must be a string\n${_conf.USAGE_INFO}`)
     )
   }
   if (!isObject(taskConfig)) {
     return handleError(
-      new Error(`task: missing task config object\n${USAGE_INFO}`)
+      new Error(`task: missing task config object\n${_conf.USAGE_INFO}`)
     )
   }
   const script = path.isAbsolute(scriptPath)
@@ -233,7 +189,7 @@ function registerTask(key, scriptPath, userConfig) {
   }
   if (key in _scripts) {
     return handleError(
-      new Error(`Tasks already configured for '${key}'\n${USAGE_REDECLARE}`)
+      new Error(`Tasks already configured for '${key}'\n${_conf.USAGE_REDECLARE}`)
     )
   }
   if (info.exists) {
@@ -241,14 +197,16 @@ function registerTask(key, scriptPath, userConfig) {
       builder = require(scriptPath)
     }
     catch(err) {
-      if (_conf.strict) throw err
-      // always check dependencies if a task failed, even if the error was different
-      info.missingDeps = checkDependencies(scriptPath)
-      // do nothing more if the error was about a documented dependency
-      let module = null
-      if (err.code === 'MODULE_NOT_FOUND' && typeof err.message === 'string') {
-        module = (err.message.match(/module '(.*)'/) || [null,null])[1]
+      // alert immediately in strict mode, store error otherwise
+      if (_conf.strict) {
+        handleError(err)
       }
+      // check dependencies if a task failed, even if the error was different
+      info.missingDeps = checkDependencies(scriptPath)
+      const module = err.code === 'MODULE_NOT_FOUND' && typeof err.message === 'string'
+        ? (err.message.match(/module '(.*)'/) || [null,null])[1]
+        : null
+      // we stored info about known missing dependencies; store this error if different
       if (typeof module !== 'string' || module in info.missingDeps === false) {
         info.errors.push(err)
       }
@@ -267,37 +225,37 @@ function registerTask(key, scriptPath, userConfig) {
 /**
  * Register matching 'build' and 'watch' gulp tasks and return their name
  * @param {string} key - short name of task
- * @param {Array|Object} configs - config object or array of config objects
+ * @param {Array|Object} data - config object or array of config objects
  * @param {Function} builder - callback that takes a config object
  * @returns {Array} - names of registered tasks
  */
-function registerTaskSet(key, configs, builder) {
+function registerTaskSet(key, data, builder) {
   const taskNames = []
 
-  normalizeUserConfig(key, configs).forEach(function(conf, index, normalized) {
+  normalizeUserConfig(key, data).forEach(function(item, index, normalized) {
     const id = key + (normalized.length > 1 ? '-' + index : '')
     const buildId = 'build-' + id
     const watchId = 'watch-' + id
 
     // save normalized sources, to be checked later
-    _scripts[key].sources = conf.src
+    _scripts[key].sources = item.src
     // check immediately in strict mode, and bail if a source is missing
     if (_conf.strict) {
-      const missing = conf.src.filter(s => glob.sync(s).length === 0)
+      const missing = item.src.filter(s => glob.sync(s).length === 0)
       if (missing.length !== 0) {
-        throw new Error(`Missing sources in task ${key}: ${
+        return handleError(new Error(`Missing sources in task ${key}: ${
           (missing.length > 1 ? '\n  ' : '') + missing.map(s => `'${s}'`).join('\n  ')
-        }`)
+        }`))
       }
     }
 
     // Register build task
-    gulp.task(buildId, () => builder(conf, taskTools))
+    gulp.task(buildId, () => builder(item, tools))
     taskNames.push(buildId)
 
     // Register matching watch task
-    if (Array.isArray(conf.watch) && conf.watch.length > 0) {
-      gulp.task(watchId, () => gulp.watch(conf.watch, [buildId]))
+    if (Array.isArray(item.watch) && item.watch.length > 0) {
+      gulp.task(watchId, () => gulp.watch(item.watch, [buildId]))
       taskNames.push(watchId)
     }
   })
@@ -320,19 +278,12 @@ function registerGlobalTasks() {
   const validTaskName = name => {
     return typeof name === 'string' && name !== '' && /\s/.test(name) === false
   }
-  const endGame = (empty, message) => () => {
-    if (empty) notify({
-      plugin: 'gulp-task-maker',
-      warn: true, message: message
-    })
-    if (_conf.debug === false) showLoadingErrors()
-  }
 
   // Prepare the build and watch tasks
   const builders = _tasks.filter(s => s.indexOf('build') === 0)
   const watchers = _tasks.filter(s => s.indexOf('watch') === 0)
-  const buildEnd = endGame(builders.length === 0, 'No build tasks found')
-  const watchEnd = endGame(watchers.length === 0, 'No watch tasks found')
+  const buildEnd = () => builders.length || handleError(new Error('No build tasks found'))
+  const watchEnd = () => watchers.length || handleError(new Error('No watch tasks found'))
 
   // Apply only if enabled
   if (validTaskName(_conf.watchTask)) {
@@ -537,33 +488,4 @@ function showLoadingErrors() {
       new Error(`Error${failedTasks.length>1?'s':''} in ${taskList}\n${fullMsg}`)
     )
   }
-}
-
-/**
- * Return a copy of config and task loading status. Helpful for troubleshooting.
- * @return {object}
- */
-function getDebugInfo() {
-  const status = {
-    config: Object.assign({}, _conf),
-    flags: Object.assign({}, _flags),
-    registered: _tasks.slice(),
-    scripts: {}
-  }
-  // clone the script info
-  for (const scriptId of Object.keys(_scripts)) {
-    const info = _scripts[scriptId]
-    const copy = {
-      path: info.path,
-      exists: info.exists,
-      sources: info.sources.slice(), // copy strings
-      knownMissingDependencies: {}, // we will copy strings next
-      errors: info.errors.slice(), // copying references!
-    }
-    for (const name of Object.keys(info.missingDeps)) {
-      copy.knownMissingDependencies[name] = info.missingDeps[name]
-    }
-    status.scripts[scriptId] = copy
-  }
-  return status
 }

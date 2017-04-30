@@ -1,5 +1,4 @@
 'use strict'
-
 const concat = require('gulp-concat')
 const gulp = require('gulp')
 const gulpif = require('gulp-if')
@@ -14,7 +13,7 @@ const notify = require('./notify.js')
 /**
  * Common tools for tasks. Includes:
  * - concat (gulp-concat),
- * - if or gulpif (gulp-if),
+ * - gulpif (gulp-if),
  * - rename (gulp-rename),
  * - sourcemaps (gulp-sourcemaps),
  * - plumber (gulp-plumber)
@@ -25,21 +24,12 @@ const notify = require('./notify.js')
  */
 module.exports = {
   // Gulp plugins
-  'concat': concat,
-  'gulpif': gulpif,
-  'plumber': plumber,
-  'rename': rename,
-  'size': size,
-  'sourcemaps': sourcemaps,
-
+  concat, gulpif, plumber, rename, size, sourcemaps,
   // Logging helpers and error management
-  'notify': notify,
-  'logErrors': logErrors,
-  'logSize': logSize,
-
+  notify, logErrors, logSize,
   // Gulp-based file builder with sourcemaps and concatenation support,
   // allowing users to just inject one or a few transforms in the middle.
-  'commonBuilder': commonBuilder
+  commonBuilder
 }
 
 /**
@@ -47,7 +37,15 @@ module.exports = {
  * @returns {*}
  */
 function logErrors() {
-  return plumber(notify)
+  return plumber(err => {
+    if (!err.plugin) {
+      err.plugin = 'gulp-task-maker'
+    }
+    notify(err)
+    // close the stream (or should we .emit('end') instead?
+    // helps watch tasks keep on running
+    this.end()
+  })
 }
 
 /**
@@ -84,7 +82,7 @@ function commonBuilder(config, transforms) {
     : '.'
 
   // create plumbed stream, init sourcemaps
-  let stream = gulp.src(config.src).pipe( plumber(notify) )
+  let stream = gulp.src(config.src).pipe( logErrors() )
   if (doMaps) {
     stream = stream.pipe(sourcemaps.init())
   }
