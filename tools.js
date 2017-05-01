@@ -37,14 +37,16 @@ module.exports = {
  * @returns {*}
  */
 function logErrors() {
-  return plumber(err => {
+  // don't use an arrow function, we need the `this` instance!
+  return plumber(function(err) {
     if (!err.plugin) {
       err.plugin = 'gulp-task-maker'
     }
     notify(err)
-    // close the stream (or should we .emit('end') instead?
-    // helps watch tasks keep on running
-    this.end()
+    // keep watch tasks running
+    if (this && typeof this.emit === 'function') {
+      this.emit('end')
+    }
   })
 }
 
@@ -82,7 +84,7 @@ function commonBuilder(config, transforms) {
     : '.'
 
   // create plumbed stream, init sourcemaps
-  let stream = gulp.src(config.src).pipe( logErrors() )
+  let stream = gulp.src(config.src).pipe(logErrors())
   if (doMaps) {
     stream = stream.pipe(sourcemaps.init())
   }
