@@ -49,7 +49,7 @@ gtm.load('gulp-tasks', {
 })
 ```
 
-This will instruct `gulp-task-maker` to load `./gulp-tasks/mytask.js`, and pass it your configuration. Let’s see how this script might look.
+This will instruct `gulp-task-maker` to load `./gulp-tasks/mytask.js`, and pass it your config object(s). Let’s see how this script might look.
 
 ### Write tasks
 
@@ -60,7 +60,7 @@ const path = require('path')
 const gulp = require('gulp')
 const somePlugin = require('gulp-something')
 
-module.exports = function mytaskBuilder(config, tools) {
+module.exports = function(config, tools) {
   const file = path.basename(config.dest)
   const dir = path.dirname(config.dest)
   return gulp.src(config.src)      // take some files
@@ -78,7 +78,7 @@ We could also simplify our task’s function further by using the `tools.commonB
 const path = require('path')
 const somePlugin = require('gulp-something')
 
-module.exports = function mytaskBuilder(config, tools) {
+module.exports = function(config, tools) {
   return tools.commonBuilder(config, [
     tools.concat(path.basename(config.dest)),
     somePlugin()
@@ -90,7 +90,7 @@ Once you have a task script you like, you can easily copy it to another project 
 
 For a complete guide about writing tasks for `gulp-task-maker`, see [In depth: Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/writing-tasks.md).
 
-### 1. Run, 2. ...?, 3. Profit!
+### Running tasks
 
 Finally we can run the gulp command, and get a console output that looks like this:
 
@@ -125,15 +125,18 @@ $ ./node_modules/.bin/gulp build-mytask
 ...
 ```
 
-Or start the main `watch` task. I recommend setting the `GTM_NOTIFY` environment variable first, to enable system notifications:
+Or start the main `watch` task:
 
 ```sh
-$ GTM_NOTIFY=1 ./node_modules/.bin/gulp watch
+$ ./node_modules/.bin/gulp watch
 [13:37:49] Using gulpfile ~/Code/my-project/gulpfile.js
 [13:37:49] Starting 'build-mytask'...
 [13:37:49] Finished 'build-mytask' after 2.55 s
 [13:37:49] Starting 'watch'...
-[13:37:49] Finished 'default' after 4.54 ms
+[13:37:49] Finished 'watch' after 4.54 ms
 ```
 
-I also recommend taking a look at the [Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/configuring-tasks.md) page, which has a few `package.json` and command line tricks.
+For more, look at:
+
+- the [Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/configuring-tasks.md) and [Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/writing-tasks.md) pages;
+- the [example directory](https://github.com/fvsch/gulp-task-maker/tree/master/example) in this repo; it contains a few easily fixable errors, to demonstrate how error reporting works.

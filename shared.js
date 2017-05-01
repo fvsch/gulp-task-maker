@@ -10,8 +10,8 @@ const config = {
   buildTask: 'build',
   watchTask: 'watch',
   defaultTask: true,
-  strict: false,
-  notify: false
+  notify: true,
+  strict: false
 }
 
 /**
@@ -74,6 +74,45 @@ gtm.task('path/to/mytask.js', [
   { src: 'bar/*.js', dest: 'dist/bar.js' }
 ])`
 
+// make everything public
+module.exports = {
+  config,
+  flags,
+  scripts,
+  tasks,
+  USAGE_INFO,
+  USAGE_REDECLARE,
+  configure,
+  copyState,
+  strToBool
+}
+
+/**
+ * Allows users to override default configuration
+ * @param {object} [input]
+ * @param {string|boolean} [input.notify]
+ * @param {string|boolean} [input.strict]
+ * @param {string|boolean} [input.buildTask]
+ * @param {string|boolean} [input.watchTask]
+ * @param {*} [input.defaultTask]
+ */
+function configure(input) {
+  if (!input || typeof input !== 'object') return
+  for (const opt of ['strict', 'notify']) {
+    if (['boolean', 'string', 'number'].indexOf(typeof input[opt]) !== -1) {
+      config[opt] = strToBool(input[opt])
+    }
+  }
+  for (const opt of ['buildTask', 'watchTask']) {
+    if (typeof input[opt] === 'string' || input[opt] === false) {
+      config[opt] = input[opt]
+    }
+  }
+  if (['boolean', 'string', 'object', 'function'].indexOf(typeof input.defaultTask) !== -1) {
+    config.defaultTask = input.defaultTask
+  }
+}
+
 /**
  * Return a copy of config and task loading status.
  * Helpful for troubleshooting.
@@ -82,8 +121,8 @@ gtm.task('path/to/mytask.js', [
 function copyState() {
   const status = {
     config: Object.assign({}, config),
-    flags: Object.assign({}, flags),
-    registered: tasks.slice(),
+    //flags: Object.assign({}, flags),
+    tasks: tasks.slice().sort(),
     scripts: {}
   }
   // clone the script info
@@ -104,13 +143,12 @@ function copyState() {
   return status
 }
 
-// make everything public
-module.exports = {
-  config,
-  flags,
-  scripts,
-  tasks,
-  USAGE_INFO,
-  USAGE_REDECLARE,
-  copyState
+/**
+ * Check if a string looks like a positive "word"
+ * Accepts as true: true, 'true', 1, '1', 'on', and 'yes' (case-insensitive)
+ * @param {string} x
+ * @returns {boolean}
+ */
+function strToBool(x) {
+  return ['1','true','on','yes'].indexOf(String(x).trim().toLowerCase()) !== -1
 }

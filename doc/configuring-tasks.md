@@ -6,11 +6,9 @@ Configuring tasks with gulp-task-maker
 * [The load and task methods](#the-load-and-task-methods)
 * [The task configuration object](#the-task-configuration-object)
 * [Multiple builds for a task](#multiple-builds-for-a-task)
-* [The build and watch tasks](#the-build-and-watch-tasks)
+* [General configuration](#general-configuration)
 * [Errors and debugging](#errors-and-debugging)
-* [Advanced config](#advanced-config)
-* [Overriding global tasks](#overriding-global-tasks)
-* [Enabling system notifications](#enabling-system-notifications)
+* [Advanced config with npm scripts](#advanced-config-with-npm-scripts)
 
 ***
 
@@ -74,7 +72,7 @@ The task configuration object can contain whatever you want, but three keys have
 
 - `src`, required: a string or array of glob patterns; `gulp-task-maker` will notify you if one of those paths or patterns match zero files.
 - `dest`, required: a string defining where the compilation result will go. Could be a folder or file name.
--  `watch`, optional: if true, `gulp-task-maker` will watch the `src` patterns for file changes; if set as a string or array of strings, it will watch those.
+- `watch`, optional: if true, `gulp-task-maker` will watch the `src` patterns for file changes; if set as a string or array of strings, it will watch those.
 
 For instance if you have a task that concatenates and minify JS code, you could have this config:
 
@@ -126,31 +124,43 @@ gtm.load('gulp-tasks', {
 })
 ```
 
-## The build and watch tasks
+## General configuration
 
-`gulp-task-maker` will create one or two tasks for each valid script & config object pair:
+`gulp-task-maker` comes with a few default behaviors, represented by config options:
 
-- a build task (e.g. `build-js-0`);
-- and a matching watch task (e.g. `watch-js-0`) if the `watch` option is set to true or to a string or array of files.
+- `notify` (defaults to `true`): whether to show system notifications.
+- `strict` (defaults to `false`): whether to throw errors happening when setting up or running tasks, or simply log them.
+- `buildTask` (defaults to `build`): name of the main build task that runs all the individual build tasks; use false to disable it.
+- `watchTask` (defaults to `watch`): name of the main watch task that runs all the individual watch tasks; use false to disable it.
+- `defaultTask` (defauts to: `true`): should we set a `'default'` gulp task? If true, the `'default'` task will be an alias for the main build task; if false, it won’t be created at all. You can also provide a string or an array of strings (representing gulp task names), or a function.
 
-It can also be useful to use gulp’s task list, using the built-in `--tasks` option:
+All these options can be overriden by calling the `conf` method:
 
-```sh
-$ ./node_modules/.bin/gulp --tasks
-[13:37:00] Tasks for ~/gulp-task-maker/example/gulpfile.js
-[13:37:00] ├── build-mincss
-[13:37:00] ├── watch-mincss
-[13:37:00] ├── build-minjs
-[13:37:00] ├── watch-minjs
-[13:37:00] ├─┬ watch
-[13:37:00] │ ├── watch-mincss
-[13:37:00] │ └── watch-minjs
-[13:37:00] └─┬ build
-[13:37:00]   ├── build-mincss
-[13:37:00]   └── build-minjs
+```js
+const gtm = require('gulp-task-maker')
+
+gtm.conf({
+  notify: false,
+  strict: true,
+  buildTask: 'my-build-name',
+  watchTask: false,
+  defaultTask: ['my-build-name', 'some-other-task']
+})
+
+gtm.load('gulp-tasks', { /* … */ })
 ```
 
-Notice the `build`, and `watch` tasks; they are global shortcut tasks that run all the `build-*` or `watch-*` tasks. (`gulp-task-maker` will also configure a `default` task as an alias for `build`.)
+Note that the `conf` method cannot be used after the `load` or `task` methods have been called. You’ll get an error in that situation.
+
+For the `notify` and `strict` options, you can also use values from environment variables, and they will be converted to booleans intelligently:
+
+```js
+gtm.conf({
+  // strings like '1', 'on', 'true' and 'yes' will be true, others will be false
+  notify: process.env.GULP_NOTIFY || true,
+  strict: process.env.GULP_STRICT_ERRORS || false
+})
+```
 
 ## Errors and debugging
 
@@ -165,9 +175,26 @@ When configuring tasks, `gulp-task-maker` will suppress most errors as they happ
   ✘ Script not found! ~/Code/my-project/gulp-tasks/other.js
 ```
 
-There are a few options for getting more information.
+But if for some reason your task configuration doesn’t seem to work and `gulp-task-maker` is not showing you any helpful error, there are a few things you can do:
 
-1. If you’d rather stop the build on any config error, use the `strict` option:
+1. Run `gulp --tasks` to get a list of successfully registered tasks. The output may look like this:
+
+```sh
+$ ./node_modules/.bin/gulp --tasks
+[13:37:12] Tasks for ~/gulp-task-maker/example/gulpfile.js
+[13:37:12] ├── build-mincss
+[13:37:12] ├── watch-mincss
+[13:37:12] ├── build-minjs
+[13:37:12] ├── watch-minjs
+[13:37:12] ├─┬ watch
+[13:37:12] │ ├── watch-mincss
+[13:37:12] │ └── watch-minjs
+[13:37:12] └─┬ build
+[13:37:12]   ├── build-mincss
+[13:37:12]   └── build-minjs
+```
+
+2. Use the `strict` option to throw errors and see a stack trace:
 
 ```js
 const gtm = require('gulp-task-maker')
@@ -175,7 +202,7 @@ gtm.conf({ strict: true })
 gtm.load('gulp-tasks', { /* … */ })
 ```
 
-2. You can also use the `info` method to get an object with `gulp-task-maker`’s config, known scripts and errors:
+3. Use the `info` method to get an object with `gulp-task-maker`’s config, known scripts and errors:
 
 ```js
 const gtm = require('gulp-task-maker')
@@ -184,7 +211,7 @@ gtm.load('gulp-tasks', { /* … */ })
 console.dir(gtm.info(), {depth:3})
 ```
 
-## Advanced config
+## Advanced config with npm scripts
 
 Since `gulpfile.js` is a Node.js script, you can use the full power of JavaScript to build your configuration, if necessary.
 
@@ -205,7 +232,7 @@ We’ve seen how we can declare a system variable with `cross-env`. We could use
 }
 ```
 
-On the command line, you would run those shortcuts with e.g. `npm run build-dev`.
+On the command line, you would run those shortcuts with, for example, `npm run build-dev`.
 
 Now in your `gulpfile.js`, you can use the `BUILD` environment variable to change some build settings:
 
@@ -252,60 +279,3 @@ gtm.task('gulp-tasks/minjs.js', [
   Object.assign(jsBuild, {watch:false, sourcemaps:false})
 ])
 ```
-
-## Overriding global tasks
-
-You can override the global tasks (`build`, `watch` and `default`) with the `conf` method:
-
-```js
-const gtm = require('gulp-task-maker')
-
-// override the default config
-// ⚠ BEFORE any gtm.load or gtm.task
-gtm.conf({
-  // override the 'build' name;
-  // or set to false to disable
-  buildTask: 'my-build-name',
-  // override the 'watch' name;
-  // or set to false to disable
-  watchTask: 'my-watch-name',
-  // disable the 'default' task
-  defaultTask: false
-})
-
-// or set the 'default' task to something else
-gtm.conf({
-  defaultTask: ['my-build-name', 'my-watch-name', 'some-other-task']
-})
-
-// you can use a function too
-gtm.conf({
-  defaultTask: function(){ /* do something, probably with gulp */ }
-})
-```
-
-## Enabling system notifications
-
-`gulp-task-maker` uses system notifications, via the `node-notifier` package, to signal configuration errors. (It can also use system notifications for errors occuring when processing source files, if tasks use the `tools.logErrors` or `tools.commonBuilder`.)
-
-To enable system notifications, use the `GTM_NOTIFY` environment variable. You can do it globally in your `~/.bashrc` or similar, but I recommend using npm scripts for this.
-
-For example, your `package.json` could look like this:
-
-```json
-{
-  "scripts": {
-    "build": "cross-env NOTIFY=1 gulp build",
-    "watch": "cross-env NOTIFY=1 gulp watch"
-  },
-  "devDependencies": {
-    "cross-env": "^4.0",
-    "gulp": "^3.9",
-    "gulp-task-maker": "^1.0"
-  }
-}
-```
-
-Now you can run the main `build` task with `npm run build`.
-
-Note: the `cross-env` package is used to set a command variable that works on Windows as well as *nix systems. If you only use macOS and Linux, you could ditch it.

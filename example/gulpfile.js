@@ -13,23 +13,27 @@
 
 const gtm = require('gulp-task-maker')
 
-const mincss = {
-  src: [
-    'node_modules/normalize.css/normalize.css',
-    'src/*.css'
-  ],
-  watch: 'src/*.css',
-  dest: 'dist/output.css'
-}
+gtm.conf({
+  notify: true,  // use system notifications for errors? (default: true)
+  strict: false, // throw errors immediately? (default: false, shows errors at the end)
+})
 
-const minjs = {
-  src: [
-    'node_modules/jquery/dist/jquery.js',
-    'this/one/doesnt/exist.js',
-    'src/*.js'
-  ],
-  watch: 'src/*.js',
-  dest: 'dist/output.js'
-}
-
-gtm.load('tasks', { mincss, minjs })
+gtm.load('tasks', {
+  mincss: {
+    src: [
+      'node_modules/normalize.css/normalize.css',
+      'src/*.css'
+    ],
+    watch: 'src/*.css',
+    dest: 'dist/output.css'
+  },
+  minjs: {
+    src: [
+      'node_modules/jquery/dist/jquery.js',
+      'this/one/doesnt/exist.js',
+      'src/*.js'
+    ],
+    watch: 'src/*.js',
+    dest: 'dist/output.js'
+  }
+})

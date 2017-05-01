@@ -13,16 +13,8 @@ const _flags = shared.flags
 const _scripts = shared.scripts
 const _tasks = shared.tasks
 
-// read start configuration from environment vars
-configure({
-  strict: strToBool(
-    process.env.GTM_STRICT ||
-    process.env.gtm_strict, '0'),
-  notify: strToBool(
-    process.env.GTM_NOTIFY ||
-    process.env.gtm_notifY ||
-    process.env.NODE_NOTIFIER ||
-    process.env.node_notifier, '0')
+process.on('exit', () => {
+  if (!_conf.strict) showLoadingErrors()
 })
 
 module.exports = {
@@ -43,15 +35,17 @@ function isObject(obj) {
 }
 
 /**
- * Check if a string looks like a positive word
- * Use for feature flags in environment variables (so they can be set as '1', 'on', etc.)
- * @param {string} [test]
- * @param {string} [fallback]
- * @returns {boolean}
+ * Allows users to override default configuration
+ * @param {object} [input] - options, or undefined to return the current config
+ * @return {object}
  */
-function strToBool(test, fallback) {
-  const s = String(test || fallback || '').trim().toLowerCase()
-  return ['1','true','on','yes'].indexOf(s) !== -1
+function configure(input) {
+  if (_flags.optionsLocked) {
+    return handleError(
+      new Error('gulp-task-maker configuration cannot be changed at this point\n' +
+      'The `conf` method cannot be called after any use of `load` or `task`.'))
+  }
+  shared.configure(input)
 }
 
 /**
@@ -66,49 +60,6 @@ function handleError(err, store) {
   }
   if (later) store.push(err)
   else notify(err)
-}
-
-/**
- * Allows users to override default configuration
- * @param {object} [settings] - options, or undefined to return the current config
- * @param {string|boolean} [settings.buildTask] - name to use for the main build task, false to disable
- * @param {string|boolean} [settings.watchTask] - name to use for the main watch task, false to disable
- * @param {*} [settings.defaultTask] - value for the default task, false to disable
- * @param {boolean} [settings.strict] - throw errors or log them afterwards
- * @param {boolean} [settings.notify] - enable system notifications
- * @return {object}
- */
-function configure(settings) {
-  // make a shallow copy of config, should not contain a reference
-  // unless the defaultTask was set to an array, object or function by user
-  const copy = () => Object.assign(Object.create(null), _conf)
-  if (!isObject(settings)) return copy()
-  if (_flags.optionsLocked === true) {
-    handleError(
-      new Error('gulp-task-maker configuration cannot be changed at this point\n' +
-        'The `gulpTaskMaker.conf` method cannot be called after ' +
-        'any use of `gulpTaskMaker.load` or `gulpTaskMaker.task`.')
-    )
-    return copy()
-  }
-  if (typeof settings.strict === 'boolean') {
-    _conf.strict = settings.strict
-    const action = settings.strict ? 'removeListener' : 'on'
-    process[action]('exit', showLoadingErrors)
-  }
-  if (typeof settings.notify === 'boolean') {
-    _conf.notify = settings.notify
-  }
-  if (typeof settings.buildTask === 'string' || settings.buildTask === false) {
-    _conf.buildTask = settings.buildTask
-  }
-  if (typeof settings.watchTask === 'string' || settings.watchTask === false) {
-    _conf.watchTask = settings.watchTask
-  }
-  if (typeof settings.defaultTask !== 'undefined') {
-    _conf.defaultTask = settings.defaultTask
-  }
-  return copy()
 }
 
 /**
@@ -282,8 +233,14 @@ function registerGlobalTasks() {
   // Prepare the build and watch tasks
   const builders = _tasks.filter(s => s.indexOf('build') === 0)
   const watchers = _tasks.filter(s => s.indexOf('watch') === 0)
-  const buildEnd = () => builders.length || handleError(new Error('No build tasks found'))
-  const watchEnd = () => watchers.length || handleError(new Error('No watch tasks found'))
+  const buildEnd = () => {
+    if (builders.length === 0) handleError(new Error('No build tasks found'))
+  }
+  const watchEnd = () => {
+    if (watchers.length === 0) handleError(new Error('No watch tasks found'))
+    // 'exit' event not happening for a watch task, show config errors now
+    if (!_conf.strict) showLoadingErrors()
+  }
 
   // Apply only if enabled
   if (validTaskName(_conf.watchTask)) {
@@ -311,7 +268,6 @@ function registerGlobalTasks() {
     }
     else if (typeof _conf.defaultTask === 'function') {
       gulp.task('default', function () {
-        showLoadingErrors()
         return _conf.defaultTask()
       })
       remember('default')
