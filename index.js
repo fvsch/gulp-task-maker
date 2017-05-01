@@ -384,7 +384,7 @@ function showLoadingErrors() {
 
   const failedTasks = []
   const taskStatus = {}
-  const missingDependencies = []
+  const fullDepsList = {}
 
   // Construct data for full report
   for (const key of Object.keys(_scripts)) {
@@ -399,9 +399,10 @@ function showLoadingErrors() {
       messages.push(`✘ Missing dependenc${mDeps.length > 1?'ies':'y'}: ${
         mDeps.map(s => `'${s}'`).join(', ')
       }`)
-      // prepare missing info for the npm install prompt
+      // merge lists of missing dependencies (for duplicates, first wins)
       for (const name of mDeps) {
-        missingDependencies.push(name + '@' + info.missingDeps[name])
+        if (name in fullDepsList) continue
+        fullDepsList[name] = info.missingDeps[name]
       }
     }
     // check sources (already checked in strict mode)
@@ -427,21 +428,22 @@ function showLoadingErrors() {
   }
 
   if (failedTasks.length !== 0) {
-    const taskMsg = []
+    const messages = []
+    const deps = Object.keys(fullDepsList).map(k => `${k}@${fullDepsList[k]}`)
     for (const key of Object.keys(taskStatus)) {
-      taskMsg.push(`[${key}]\n  ${
+      messages.push(`[${key}]\n  ${
         taskStatus[key].join('\n').replace(/\n/g, '\n  ')
       }`)
     }
-    let fullMsg = taskMsg.join('\n')
-    if (missingDependencies.length !== 0) {
-      fullMsg += '\n\nInstall missing task dependencies with:\n' +
-        '  npm install -D "' + missingDependencies.join('" "') + '"\n'
+    let final = messages.join('\n')
+    if (deps.length !== 0) {
+      final += '\n\nInstall missing task dependencies with:\n' +
+        '  npm install -D "' + deps.join('" "') + '"\n'
     }
     _flags.errorsShown = true
     const taskList = failedTasks.map(s => `'${s}'`).join(', ')
     handleError(
-      new Error(`Error${failedTasks.length>1?'s':''} in ${taskList}\n${fullMsg}`)
+      new Error(`Error${failedTasks.length>1?'s':''} in ${taskList}\n${final}`)
     )
   }
 }
