@@ -51,7 +51,11 @@ gtm.load('path/to/tasks', {
 })
 
 // or set up a single task
-gtm.task('path/to/tasks/something.js', { … })`
+gtm.task('path/to/tasks/something.js', { … })
+
+// or skip the script loader and provide your own function
+gtm.task('task-id', { … }, taskFunction)
+`
 
 /**
  * Usage info for redeclared tasks
@@ -72,7 +76,8 @@ gtm.task('path/to/mytask.js', { src: 'bar/*.js', dest: 'dist/bar.js' })
 gtm.task('path/to/mytask.js', [
   { src: 'foo/*.js', dest: 'dist/foo.js' },
   { src: 'bar/*.js', dest: 'dist/bar.js' }
-])`
+])
+`
 
 // make everything public
 module.exports = {
@@ -129,11 +134,13 @@ function copyState() {
   for (const scriptId of Object.keys(scripts)) {
     const info = scripts[scriptId]
     const copy = {
-      path: info.path,
-      exists: info.exists,
+      callback: info.callback,
       sources: info.sources.slice(), // copy strings
       knownMissingDependencies: {}, // we will copy strings next
       errors: info.errors.slice(), // copying references!
+    }
+    if (typeof info.exists === 'boolean') {
+      copy.exists = info.exists
     }
     for (const name of Object.keys(info.missingDeps)) {
       copy.knownMissingDependencies[name] = info.missingDeps[name]

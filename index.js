@@ -68,17 +68,17 @@ function handleError(err, store) {
  * @param {Object} tasksConfig - tasks config
  */
 function loadTasks(taskDir, tasksConfig) {
-  _flags.optionsLocked = true
   if (typeof taskDir !== 'string') {
     return handleError(
-      new Error(`load: missing taskDir option\n${_conf.USAGE_INFO}`)
+      new Error(`load: missing taskDir option\n${shared.USAGE_INFO}`)
     )
   }
   if (!isObject(tasksConfig)) {
     return handleError(
-      new Error(`load: missing task config object\n${_conf.USAGE_INFO}`)
+      new Error(`load: missing task config object\n${shared.USAGE_INFO}`)
     )
   }
+  _flags.optionsLocked = true
   const dir = path.isAbsolute(taskDir)
     ? path.normalize(taskDir)
     : path.join(process.cwd(), taskDir)
@@ -97,28 +97,35 @@ function loadTasks(taskDir, tasksConfig) {
 
 /**
  * Create a single task (public method, defers to createTask)
- * @param {string} scriptPath
+ * @param {string} scriptId
  * @param {object} taskConfig
+ * @param {function} [builder]
  */
-function loadSingle(scriptPath, taskConfig) {
-  _flags.optionsLocked = true
-  if (typeof scriptPath !== 'string') {
+function loadSingle(scriptId, taskConfig, builder) {
+  if (typeof scriptId !== 'string' || !scriptId) {
     return handleError(
-      new Error(`task: first argument must be a string\n${_conf.USAGE_INFO}`)
+      new Error(`task: first argument must be a string\n${shared.USAGE_INFO}`)
     )
   }
   if (!isObject(taskConfig)) {
     return handleError(
-      new Error(`task: missing task config object\n${_conf.USAGE_INFO}`)
+      new Error(`task: missing task config object\n${shared.USAGE_INFO}`)
     )
   }
-  const script = path.isAbsolute(scriptPath)
-    ? path.normalize(scriptPath)
-    : path.join(process.cwd(), scriptPath)
-  const key = path.basename(script, '.js')
+  _flags.optionsLocked = true
+  let key, action
+  if (typeof builder === 'function') {
+    key = scriptId
+    action = builder
+  } else {
+    action = path.isAbsolute(scriptId)
+      ? path.normalize(scriptId)
+      : path.join(process.cwd(), scriptId)
+    key = path.basename(action, '.js')
+  }
 
   // register tasks
-  registerTask(key, script, taskConfig)
+  registerTask(key, action, taskConfig)
   registerGlobalTasks()
 }
 
@@ -126,48 +133,54 @@ function loadSingle(scriptPath, taskConfig) {
  * Load a task script and create the related gulp tasks (based on provided config).
  * This function mostly does validation of input data, and defers to registerTaskSet.
  * @param {string} key
- * @param {string} scriptPath
+ * @param {string|function} callback
  * @param {object} userConfig
  */
-function registerTask(key, scriptPath, userConfig) {
-  let builder = null
-  const info = {
-    path: scriptPath,
-    exists: fs.existsSync(scriptPath),
-    sources: [],
-    errors: [],
-    missingDeps: {},
-  }
+function registerTask(key, callback, userConfig) {
   if (key in _scripts) {
     return handleError(
       new Error(`Tasks already configured for '${key}'\n${_conf.USAGE_REDECLARE}`)
     )
   }
-  if (info.exists) {
-    try {
-      builder = require(scriptPath)
+  let cb = null
+  const info = {
+    callback: callback,
+    sources: [],
+    errors: [],
+    missingDeps: {},
+  }
+  if (typeof callback === 'function') {
+    cb = callback
+  }
+  else if (typeof callback === 'string') {
+    info.exists = fs.existsSync(callback)
+    if (!info.exists) {
+      handleError(new Error('Script not found: ' + callback), info.errors)
     }
-    catch(err) {
-      // alert immediately in strict mode, store error otherwise
-      if (_conf.strict) {
-        handleError(err)
+    else {
+      try {
+        cb = require(callback)
       }
-      // check dependencies if a task failed, even if the error was different
-      info.missingDeps = checkDependencies(scriptPath)
-      const module = err.code === 'MODULE_NOT_FOUND' && typeof err.message === 'string'
-        ? (err.message.match(/module '(.*)'/) || [null,null])[1]
-        : null
-      // we stored info about known missing dependencies; store this error if different
-      if (typeof module !== 'string' || module in info.missingDeps === false) {
-        info.errors.push(err)
+      catch (err) {
+        if (_conf.strict) throw err
+        // check dependencies if a task failed, even if the error was different
+        info.missingDeps = checkDependencies(action)
+        const module = err.code === 'MODULE_NOT_FOUND' && typeof err.message === 'string'
+          ? (err.message.match(/module '(.*)'/) || [null, null])[1]
+          : null
+        // we stored info about known missing dependencies; store this error if different only
+        if (typeof module !== 'string' || module in info.missingDeps === false) {
+          info.errors.push(err)
+        }
       }
     }
   }
   // save script info
   _scripts[key] = info
   // register and remember tasks
-  if (builder) {
-    registerTaskSet(key, userConfig, builder).forEach(t => {
+  if (typeof cb === 'function') {
+    registerTaskSet(key, userConfig, cb).forEach(t => {
+      console.log('pushing task: ' + t)
       _tasks.push(t)
     })
   }
@@ -177,10 +190,10 @@ function registerTask(key, scriptPath, userConfig) {
  * Register matching 'build' and 'watch' gulp tasks and return their name
  * @param {string} key - short name of task
  * @param {Array|Object} data - config object or array of config objects
- * @param {Function} builder - callback that takes a config object
+ * @param {Function} cb - callback that takes a config object
  * @returns {Array} - names of registered tasks
  */
-function registerTaskSet(key, data, builder) {
+function registerTaskSet(key, data, cb) {
   const taskNames = []
 
   normalizeUserConfig(key, data).forEach(function(item, index, normalized) {
@@ -201,7 +214,7 @@ function registerTaskSet(key, data, builder) {
     }
 
     // Register build task
-    gulp.task(buildId, () => builder(item, tools))
+    gulp.task(buildId, () => cb(item, tools))
     taskNames.push(buildId)
 
     // Register matching watch task
@@ -379,9 +392,8 @@ function checkDependencies(scriptPath) {
  */
 function showLoadingErrors() {
   if (_flags.errorsShown) {
-    return
+    //return
   }
-
   const failedTasks = []
   const taskStatus = {}
   const fullDepsList = {}
@@ -390,9 +402,10 @@ function showLoadingErrors() {
   for (const key of Object.keys(_scripts)) {
     const info = _scripts[key]
     const messages = []
-    const scriptMsg = info.exists
-      ? '✔ Using ' + info.path
-      : '✘ Script not found! ' + info.path
+    if (info.exists !== false) {
+      messages.push('✔ Using ' + (typeof info.callback === 'string'
+        ? info.callback : require('util').inspect(info.callback)))
+    }
     // missing dependencies
     const mDeps = Object.keys(info.missingDeps)
     if (mDeps.length !== 0) {
@@ -414,6 +427,7 @@ function showLoadingErrors() {
         }`)
       }
     }
+    // display remaining errors
     for (const error of info.errors) {
       let msg = error.message || error.toString()
       messages.push(
@@ -421,10 +435,10 @@ function showLoadingErrors() {
         msg.replace(/\n/g, '\n  ')
       )
     }
-    if (!info.exists || messages.length !== 0) {
+    if (info.exists === false || messages.length > 1) {
       failedTasks.push(key)
     }
-    taskStatus[key] = [scriptMsg].concat(messages)
+    taskStatus[key] = messages
   }
 
   if (failedTasks.length !== 0) {
