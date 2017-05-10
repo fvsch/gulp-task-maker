@@ -3,6 +3,7 @@ const fs = require('fs')
 const glob = require('glob')
 const gulp = require('gulp')
 const path = require('path')
+const util = require('util')
 const notify = require('./notify.js')
 const shared = require('./shared.js')
 const tools = require('./tools.js')
@@ -164,7 +165,7 @@ function registerTask(key, callback, userConfig) {
       catch (err) {
         if (_conf.strict) throw err
         // check dependencies if a task failed, even if the error was different
-        info.missingDeps = checkDependencies(action)
+        info.missingDeps = checkDependencies(callback)
         const module = err.code === 'MODULE_NOT_FOUND' && typeof err.message === 'string'
           ? (err.message.match(/module '(.*)'/) || [null, null])[1]
           : null
@@ -180,7 +181,6 @@ function registerTask(key, callback, userConfig) {
   // register and remember tasks
   if (typeof cb === 'function') {
     registerTaskSet(key, userConfig, cb).forEach(t => {
-      console.log('pushing task: ' + t)
       _tasks.push(t)
     })
   }
@@ -202,7 +202,7 @@ function registerTaskSet(key, data, cb) {
     const watchId = 'watch-' + id
 
     // save normalized sources, to be checked later
-    _scripts[key].sources = item.src
+    item.src.forEach(s => _scripts[key].sources.push(s))
     // check immediately in strict mode, and bail if a source is missing
     if (_conf.strict) {
       const missing = item.src.filter(s => glob.sync(s).length === 0)
@@ -244,8 +244,8 @@ function registerGlobalTasks() {
   }
 
   // Prepare the build and watch tasks
-  const builders = _tasks.filter(s => s.indexOf('build') === 0)
-  const watchers = _tasks.filter(s => s.indexOf('watch') === 0)
+  const builders = _tasks.filter(s => s.indexOf('build-') === 0)
+  const watchers = _tasks.filter(s => s.indexOf('watch-') === 0)
   const buildEnd = () => {
     if (builders.length === 0) handleError(new Error('No build tasks found'))
   }
@@ -403,8 +403,7 @@ function showLoadingErrors() {
     const info = _scripts[key]
     const messages = []
     if (info.exists !== false) {
-      messages.push('✔ Using ' + (typeof info.callback === 'string'
-        ? info.callback : require('util').inspect(info.callback)))
+      messages.push('✔ Using ' + util.inspect(info.callback))
     }
     // missing dependencies
     const mDeps = Object.keys(info.missingDeps)

@@ -126,18 +126,17 @@ function configure(input) {
 function copyState() {
   const status = {
     config: Object.assign({}, config),
-    //flags: Object.assign({}, flags),
+    flags: Object.assign({}, flags),
     tasks: tasks.slice().sort(),
     scripts: {}
   }
-  // clone the script info
   for (const scriptId of Object.keys(scripts)) {
     const info = scripts[scriptId]
     const copy = {
-      callback: info.callback,
+      callback: info.callback, // string, or reference to a function
       sources: info.sources.slice(), // copy strings
       knownMissingDependencies: {}, // we will copy strings next
-      errors: info.errors.slice(), // copying references!
+      errors: info.errors.slice(), // new array, contains references
     }
     if (typeof info.exists === 'boolean') {
       copy.exists = info.exists
