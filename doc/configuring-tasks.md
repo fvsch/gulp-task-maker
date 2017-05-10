@@ -66,6 +66,16 @@ gtm.task('other-tasks/baz.js', {
 })
 ```
 
+Finally, if you don’t want `gulp-task-maker` to load your task’s function from the filesystem, you can pass it as a third argument to the `task` method:
+
+```js
+const gtm = require('gulp-task-maker')
+
+gtm.task('my-task-name', { /* config */ }, function(config, tools) {
+  /* do something with config */
+})
+```
+
 ## The task configuration object
 
 The task configuration object can contain whatever you want, but three keys have special meaning:
