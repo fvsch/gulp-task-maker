@@ -1,17 +1,21 @@
 /**
  * @type {object} userConfig - gulp-task-maker options
- * @property {string|boolean} buildTask - name to use for the global 'build' task
- * @property {string|boolean} watchTask - name to use for the global 'watch' task
- * @property {*} defaultTask - value to use (string, array, function…) for the 'default' task
  * @property {boolean} strict - whether to throw errors or log them after the fact
  * @property {boolean} notify - use node-notifier for system notifications?
+ * @property {object} prefix - prefixes for the build and watch tasks
+ * @property {object} groups - names and configuration for task groups
  */
 const config = {
-  buildTask: 'build',
-  watchTask: 'watch',
-  defaultTask: true,
   notify: true,
-  strict: false
+  strict: false,
+  prefix: {
+    build: 'build-',
+    watch: 'watch-'
+  },
+  groups: {
+    build: name => name.startsWith('build-'),
+    watch: name => name.startsWith('watch-')
+  }
 }
 
 /**
@@ -89,32 +93,45 @@ module.exports = {
   USAGE_REDECLARE,
   configure,
   copyState,
-  strToBool
+  strToBool,
+  isObject
 }
 
 /**
  * Allows users to override default configuration
  * @param {object} [input]
- * @param {string|boolean} [input.notify]
- * @param {string|boolean} [input.strict]
- * @param {string|boolean} [input.buildTask]
- * @param {string|boolean} [input.watchTask]
- * @param {*} [input.defaultTask]
+ * @property {string|boolean|number} [input.notify]
+ * @property {string|boolean|number} [input.strict]
+ * @property {object} [input.prefix]
+ * @property {object} [input.groups]
  */
 function configure(input) {
-  if (!input || typeof input !== 'object') return
+  if (!isObject(input)) {
+    return
+  }
   for (const opt of ['strict', 'notify']) {
     if (['boolean', 'string', 'number'].indexOf(typeof input[opt]) !== -1) {
       config[opt] = strToBool(input[opt])
     }
   }
-  for (const opt of ['buildTask', 'watchTask']) {
-    if (typeof input[opt] === 'string' || input[opt] === false) {
-      config[opt] = input[opt]
+  if (isObject(input.prefix)) {
+    for (const name of ['build', 'watch']) {
+      if (typeof input.prefix[name] === 'string') {
+        config.prefix[name] = input.prefix[name].trim().replace(/\s+/g, '-')
+      }
     }
   }
-  if (['boolean', 'string', 'object', 'function'].indexOf(typeof input.defaultTask) !== -1) {
-    config.defaultTask = input.defaultTask
+  if (isObject(input.groups)) {
+    for (const name of Object.keys(input.groups)) {
+      const value = input.groups[name]
+      if (typeof value === 'function' || Array.isArray(value)) {
+        config.groups[name] = value
+      }
+      // falsy values disable a group
+      else if (!value) {
+        config.groups[name] = null
+      }
+    }
   }
 }
 
@@ -157,4 +174,13 @@ function copyState() {
  */
 function strToBool(x) {
   return ['1','true','on','yes'].indexOf(String(x).trim().toLowerCase()) !== -1
+}
+
+/**
+ * Basic workaround for typeof null === 'object'
+ * @param obj
+ * @returns {boolean}
+ */
+function isObject(obj) {
+  return obj !== null && typeof obj === 'object'
 }

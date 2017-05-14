@@ -15,7 +15,7 @@ const gtm = require('gulp-task-maker')
 
 gtm.conf({
   notify: true,  // use system notifications for errors? (default: true)
-  strict: false, // throw errors immediately? (default: false, shows errors at the end)
+  strict: false  // throw errors immediately? (default: false, shows errors at the end)
 })
 
 gtm.load('tasks', {
@@ -30,7 +30,6 @@ gtm.load('tasks', {
   minjs: {
     src: [
       'node_modules/jquery/dist/jquery.js',
-      'this/one/doesnt/exist.js',
       'src/*.js'
     ],
     watch: 'src/*.js',

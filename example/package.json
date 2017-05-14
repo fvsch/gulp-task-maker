@@ -2,7 +2,7 @@
   "name": "gulp-task-maker-example",
   "private": true,
   "scripts": {
-    "tasks": "gulp --tasks",
+    "list": "gulp --tasks",
     "build": "gulp build",
     "watch": "gulp watch"
   },

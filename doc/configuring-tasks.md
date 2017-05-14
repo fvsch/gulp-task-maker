@@ -4,11 +4,10 @@ Configuring tasks with gulp-task-maker
 *Table of contents:*
 
 * [The load and task methods](#the-load-and-task-methods)
-* [The task configuration object](#the-task-configuration-object)
+* [Task configuration](#task-configuration)
 * [Multiple builds for a task](#multiple-builds-for-a-task)
-* [General configuration](#general-configuration)
 * [Errors and debugging](#errors-and-debugging)
-* [Advanced config with npm scripts](#advanced-config-with-npm-scripts)
+* [Advanced config](#advanced-config)
 
 ***
 
@@ -76,7 +75,7 @@ gtm.task('my-task-name', { /* config */ }, function(config, tools) {
 })
 ```
 
-## The task configuration object
+## Task configuration
 
 The task configuration object can contain whatever you want, but three keys have special meaning:
 
@@ -134,44 +133,6 @@ gtm.load('gulp-tasks', {
 })
 ```
 
-## General configuration
-
-`gulp-task-maker` comes with a few default behaviors, represented by config options:
-
-- `notify` (defaults to `true`): whether to show system notifications.
-- `strict` (defaults to `false`): whether to throw errors happening when setting up or running tasks, or simply log them.
-- `buildTask` (defaults to `build`): name of the main build task that runs all the individual build tasks; use false to disable it.
-- `watchTask` (defaults to `watch`): name of the main watch task that runs all the individual watch tasks; use false to disable it.
-- `defaultTask` (defauts to: `true`): should we set a `'default'` gulp task? If true, the `'default'` task will be an alias for the main build task; if false, it won’t be created at all. You can also provide a string or an array of strings (representing gulp task names), or a function.
-
-All these options can be overriden by calling the `conf` method:
-
-```js
-const gtm = require('gulp-task-maker')
-
-gtm.conf({
-  notify: false,
-  strict: true,
-  buildTask: 'my-build-name',
-  watchTask: false,
-  defaultTask: ['my-build-name', 'some-other-task']
-})
-
-gtm.load('gulp-tasks', { /* … */ })
-```
-
-Note that the `conf` method cannot be used after the `load` or `task` methods have been called. You’ll get an error in that situation.
-
-For the `notify` and `strict` options, you can also use values from environment variables, and they will be converted to booleans intelligently:
-
-```js
-gtm.conf({
-  // strings like '1', 'on', 'true' and 'yes' will be true, others will be false
-  notify: process.env.GULP_NOTIFY || true,
-  strict: process.env.GULP_STRICT_ERRORS || false
-})
-```
-
 ## Errors and debugging
 
 When configuring tasks, `gulp-task-maker` will suppress most errors as they happen, and try to display them all later in a compact display that may look like this:
@@ -221,7 +182,86 @@ gtm.load('gulp-tasks', { /* … */ })
 console.dir(gtm.info(), {depth:3})
 ```
 
-## Advanced config with npm scripts
+## Advanced config
+
+### General configuration
+
+`gulp-task-maker` comes with a few default behaviors, represented by config options:
+
+- `notify` (defaults to `true`): whether to show system notifications.
+- `strict` (defaults to `false`): whether to throw errors happening when setting up or running tasks, or simply log them.
+- `buildPrefix` (defaults to `'build-'`): prefix to use for build tasks.
+- `watchPrefix` (defaults to `'watch-'`): prefix to use for watch tasks.
+- `groups`: configuration for task groups; by default, two groups are configured, `'build'` for all build tasks and `'watch'` for all watch tasks.
+
+All these options can be overriden by calling the `conf` method:
+
+```js
+const gtm = require('gulp-task-maker')
+
+gtm.conf({
+  notify: false,
+  strict: true,
+  prefix: {
+    // remove prefix for build tasks
+    build: '',
+    watch: 'watch-'
+  },
+  groups: {
+    // now, use RegExp to make sure the 'build' task group contains all
+    // tasks that do not start with 'watch-'
+    'build': name => !name.startsWith('watch-'),
+    'watch': name => name.startsWith('watch-'),
+    // add a custom task group (using a list of task names, or 
+    'custom-build': ['foo-0', 'bar']
+  }
+})
+
+gtm.load('gulp-tasks', { /* … */ })
+```
+
+Note that the `conf` method cannot be used after the `load` or `task` methods have been called. You’ll get an error in that situation.
+
+For the `notify` and `strict` options, you can also use values from environment variables, and they will be converted to booleans intelligently:
+
+```js
+gtm.conf({
+  // strings like '1', 'on', 'true' and 'yes' will be true, others will be false
+  notify: process.env.GULP_NOTIFY || true,
+  strict: process.env.GULP_STRICT_ERRORS || false
+})
+```
+
+### Making variants of a task
+
+If you need to build the same sources and get a slightly different output, you can “fork” a config object and create several tasks:
+
+```js
+const gtm = require('gulp-task-maker')
+
+const jsBuild = {
+  src: [
+    'node_modules/jquery/dist/jquery.js',
+    'node_modules/foo/foo.js',
+    'node_modules/bar/bar.js',
+    'src/*.js',
+    'other-source/js/*.js'
+  ],
+  watch: ['src/*.js', 'other-source/js/*.js'],
+  dest: 'dist/output.js',
+  minify: true,
+  sourcemaps: true
+}
+
+gtm.task('gulp-tasks/minjs.js', [
+  // dev = watch, sourcemaps, not minified
+  Object.assign({}, jsBuild, {minify:false}),
+  // prod = no watch, no sourcemaps, minified
+  Object.assign({}, jsBuild, {watch:false, sourcemaps:false})
+])
+```
+
+### Using environment variables in npm scripts
 
 Since `gulpfile.js` is a Node.js script, you can use the full power of JavaScript to build your configuration, if necessary.
 
@@ -261,31 +301,4 @@ gtm.task('gulp-tasks/minjs.js', {
   minify: !isDev,
   sourcemaps: isDev
 })
-```
-
-This is just one possible approach. You could use two different config objects, instead of relying on npm scripts and environment variables:
-
-```js
-const gtm = require('gulp-task-maker')
-
-const jsBuild = {
-  src: [
-    'node_modules/jquery/dist/jquery.js',
-    'node_modules/foo/foo.js',
-    'node_modules/bar/bar.js',
-    'src/*.js',
-    'other-source/js/*.js'
-  ],
-  watch: ['src/*.js', 'other-source/js/*.js'],
-  dest: 'dist/output.js',
-  minify: true,
-  sourcemaps: true
-}
-
-gtm.task('gulp-tasks/minjs.js', [
-  // dev = watch, sourcemaps, not minified
-  Object.assign(jsBuild, {minify:false}),
-  // prod = no watch, no sourcemaps, minified
-  Object.assign(jsBuild, {watch:false, sourcemaps:false})
-])
 ```

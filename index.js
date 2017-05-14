@@ -4,15 +4,17 @@ const glob = require('glob')
 const gulp = require('gulp')
 const path = require('path')
 const util = require('util')
+
 const notify = require('./notify.js')
 const shared = require('./shared.js')
 const tools = require('./tools.js')
 
-// shorter references to common state
+// shorter references (avoid destructuring for node4)
 const _conf = shared.config
 const _flags = shared.flags
 const _scripts = shared.scripts
 const _tasks = shared.tasks
+const isObject = shared.isObject
 
 process.on('exit', () => {
   if (!_conf.strict) showLoadingErrors()
@@ -24,15 +26,6 @@ module.exports = {
   load: loadTasks,
   task: loadSingle,
   tools: tools
-}
-
-/**
- * Basic workaround for typeof null === 'object'
- * @param obj
- * @returns {boolean}
- */
-function isObject(obj) {
-  return obj !== null && typeof obj === 'object'
 }
 
 /**
@@ -93,7 +86,7 @@ function loadTasks(taskDir, tasksConfig) {
   for (const key of Object.keys(tasksConfig)) {
     registerTask(key, path.join(dir, key + '.js'), tasksConfig[key])
   }
-  registerGlobalTasks()
+  registerTaskGroups()
 }
 
 /**
@@ -127,7 +120,7 @@ function loadSingle(scriptId, taskConfig, builder) {
 
   // register tasks
   registerTask(key, action, taskConfig)
-  registerGlobalTasks()
+  registerTaskGroups()
 }
 
 /**
@@ -198,8 +191,8 @@ function registerTaskSet(key, data, cb) {
 
   normalizeUserConfig(key, data).forEach(function(item, index, normalized) {
     const id = key + (normalized.length > 1 ? '-' + index : '')
-    const buildId = 'build-' + id
-    const watchId = 'watch-' + id
+    const buildId = _conf.prefix.build + id
+    const watchId = _conf.prefix.watch + id
 
     // save normalized sources, to be checked later
     item.src.forEach(s => _scripts[key].sources.push(s))
@@ -228,62 +221,34 @@ function registerTaskSet(key, data, cb) {
 }
 
 /**
- * Register or update gulp tasks 'build', 'watch', and optionally 'default'
+ * Register configured task groups; by default, 'build' and 'watch'
  * We might end up calling this several times (especially if using
  * the gulpTaskMaker.task method), but gulp seems to be okay with
  * overwriting a task reference with a new one.
  */
-function registerGlobalTasks() {
-  const remember = name => {
+function registerTaskGroups() {
+  const gtask = (name, list) => {
+    gulp.task(name, list, function() {
+      if (list.length === 0) {
+        handleError(new Error(`No subtasks found for: '${name}'`))
+      }
+      // 'exit' event not happening for a watch task, show config errors now
+      if (list.some(x => x.indexOf('watch-') === 0) && !_conf.strict) {
+        showLoadingErrors()
+      }
+    })
     if (_tasks.indexOf(name) === -1) {
-      _tasks.push(name)
+      _tasks.unshift(name)
     }
   }
-  const validTaskName = name => {
-    return typeof name === 'string' && name !== '' && /\s/.test(name) === false
-  }
-
-  // Prepare the build and watch tasks
-  const builders = _tasks.filter(s => s.indexOf('build-') === 0)
-  const watchers = _tasks.filter(s => s.indexOf('watch-') === 0)
-  const buildEnd = () => {
-    if (builders.length === 0) handleError(new Error('No build tasks found'))
-  }
-  const watchEnd = () => {
-    if (watchers.length === 0) handleError(new Error('No watch tasks found'))
-    // 'exit' event not happening for a watch task, show config errors now
-    if (!_conf.strict) showLoadingErrors()
-  }
-
-  // Apply only if enabled
-  if (validTaskName(_conf.watchTask)) {
-    gulp.task(_conf.watchTask, watchers, watchEnd)
-    remember(_conf.watchTask)
-  }
-  if (validTaskName(_conf.buildTask)) {
-    gulp.task(_conf.buildTask, builders, buildEnd)
-    remember(_conf.buildTask)
-  }
-  if (_conf.defaultTask === true) {
-    gulp.task('default', builders, buildEnd)
-    remember('default')
-  }
-
-  // Other possible cases for the default task
-  if (typeof _conf.defaultTask !== 'boolean') {
-    if (validTaskName(_conf.defaultTask)) {
-      gulp.task('default', [_conf.defaultTask])
-      remember('default')
+  for (const key of Object.keys(_conf.groups)) {
+    const value = _conf.groups[key]
+    const name = key.trim().replace(/\s+/g, '-')
+    if (Array.isArray(value)) {
+      gtask(name, value.filter(x => typeof x === 'string'))
     }
-    else if (Array.isArray(_conf.defaultTask) && _conf.defaultTask.length > 0) {
-      gulp.task('default', _conf.defaultTask)
-      remember('default')
-    }
-    else if (typeof _conf.defaultTask === 'function') {
-      gulp.task('default', function () {
-        return _conf.defaultTask()
-      })
-      remember('default')
+    else if (typeof value === 'function') {
+      gtask(name, _tasks.filter(value))
     }
   }
 }
