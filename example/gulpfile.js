@@ -1,3 +1,4 @@
+'use strict'
 /**
  * Simple test with tasks that concatenate and minify CSS and JS
  *

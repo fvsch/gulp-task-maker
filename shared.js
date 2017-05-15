@@ -1,3 +1,4 @@
+'use strict'
 /**
  * @type {object} userConfig - gulp-task-maker options
  * @property {boolean} strict - whether to throw errors or log them after the fact
