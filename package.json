@@ -1,6 +1,6 @@
 {
   "name": "gulp-task-maker",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Helper for writing and running configurable gulp tasks. Separates task logic and configuration, allows multiple builds using the same task, and uses system notifications for configuration and plugin errors.",
   "author": "Florens Verschelde <florens@fvsch.com>",
   "repository": "https://github.com/fvsch/gulp-task-maker",
