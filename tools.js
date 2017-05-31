@@ -65,8 +65,8 @@ function logSize(title) {
 }
 
 /**
- * Create a gulp workload (read, transform, then write to disk),
- * with sourcemaps support and better error and output logging.
+ * gulp workflow (read files, transform, then write to disk),
+ * with sourcemaps support and better error and output logging
  * @param {object} config
  * @param {Array} transforms
  * @return {*}

@@ -29,7 +29,7 @@ module.exports = {
 }
 
 /**
- * Allows users to override default configuration
+ * Override default gulp-task-maker configuration
  * @param {object} [input] - options, or undefined to return the current config
  * @return {object}
  */
@@ -57,8 +57,9 @@ function handleError(err, store) {
 }
 
 /**
- * Resolve the provided tasks directory path and return the createTasks function
- * @param {string} taskDir - task directory path or fully-fledged config
+ * For each key in tasksConfig, load the corresponding script from taskDir
+ * and create a set of gulp tasks
+ * @param {string} taskDir - task directory path
  * @param {Object} tasksConfig - tasks config
  */
 function loadTasks(taskDir, tasksConfig) {
@@ -90,7 +91,7 @@ function loadTasks(taskDir, tasksConfig) {
 }
 
 /**
- * Create a single task (public method, defers to createTask)
+ * Create a set of gulp tasks from a single script or function
  * @param {string} scriptId
  * @param {object} taskConfig
  * @param {function} [builder]
