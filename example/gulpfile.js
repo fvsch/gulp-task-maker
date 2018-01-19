@@ -9,7 +9,7 @@
  *   read if one seems to be missing.
  *
  * For more examples of tasks using gulp-task-maker,
- * see https://github.com/gradientz/assets-builder
+ * see https://github.com/kaliop/assets-builder
  */
 
 const gtm = require('gulp-task-maker')

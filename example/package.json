@@ -12,9 +12,10 @@
   },
   "devDependencies": {
     "gulp": "^3.9",
-    "gulp-task-maker": "../"
+    "gulp-task-maker": "^1.4"
   },
   "browserslist": [
-    "last 2 versions", "ie >= 11"
+    "last 2 versions",
+    "ie >= 11"
   ]
 }
