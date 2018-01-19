@@ -1,5 +1,6 @@
 'use strict'
-const gutil = require('gulp-util')
+const colors = require('ansi-colors')
+const log = require('fancy-log')
 const notifier = require('node-notifier')
 const path = require('path')
 const _conf = require('./shared.js').config
@@ -31,7 +32,7 @@ module.exports = function notify(err) {
     const parts = message.replace('\n', '_S_E_P_').split('_S_E_P_', 2)
     const header = parts[0]
     const details = parts.length === 2 ? ('\n' + parts[1]).replace(/\n/g, '\n  ') : ''
-    const color = err.warn ? gutil.colors.reset : gutil.colors.red
-    gutil.log( color(prefix + header) + details)
+    const color = err.warn ? colors.reset : colors.red
+    log( color(prefix + header) + details)
   }
 }
