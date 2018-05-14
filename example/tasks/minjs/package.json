@@ -1,0 +1,8 @@
+{
+  "name": "@gulp-task-maker/minjs",
+  "private": true,  
+  "dependencies": {
+    "gulp-concat": "^2.6",
+    "gulp-uglify": "^2.0"
+  }
+}

@@ -7,15 +7,17 @@
     "watch": "gulp watch"
   },
   "dependencies": {
-    "jquery": "^3.2",
-    "normalize.css": "^6.0"
+    "jquery": "^3.3",
+    "normalize.css": "^8.0"
   },
   "devDependencies": {
-    "gulp": "^3.9",
-    "gulp-task-maker": "^1.4"
+    "@gulp-task-maker/mincss": "file:tasks/mincss",
+    "@gulp-task-maker/minjs": "file:tasks/minjs",
+    "gulp": "^4.0",
+    "gulp-task-maker": "2.0.0-beta1"
   },
   "browserslist": [
     "last 2 versions",
-    "ie >= 11"
+    "not ie < 11"
   ]
 }

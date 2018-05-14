@@ -70,9 +70,11 @@ Finally, if you don’t want `gulp-task-maker` to load your task’s function fr
 ```js
 const gtm = require('gulp-task-maker')
 
-gtm.task('my-task-name', { /* config */ }, function(config, tools) {
+const myTask = (config, tools) => {
   /* do something with config */
-})
+}
+
+gtm.add(myTask, { /* config */ })
 ```
 
 ## Task configuration

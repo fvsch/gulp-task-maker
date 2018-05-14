@@ -1,67 +1,21 @@
-'use strict'
-const concat = require('gulp-concat')
+/**
+ * @file Common tools for tasks. Includes:
+ * - catchErrors (pre-configured gulp-plumber with system notifications)
+ * - commonStream (implements a common gulp.src + transforms + gulp.dest workflow)
+ * - notify (a custom notification function, using node-notifier)
+ * - showSize (pre-configured gulp-size)
+ */
+
 const gulp = require('gulp')
-const gulpif = require('gulp-if')
+const log = require('fancy-log')
 const path = require('path')
 const plumber = require('gulp-plumber')
-const rename = require('gulp-rename')
 const size = require('gulp-size')
 const sourcemaps = require('gulp-sourcemaps')
-const notify = require('./notify.js')
+const notifier = require('node-notifier')
 
-/**
- * Common tools for tasks. Includes:
- * - concat (gulp-concat),
- * - gulpif (gulp-if),
- * - rename (gulp-rename),
- * - sourcemaps (gulp-sourcemaps),
- * - plumber (gulp-plumber)
- * - notify (a custom notification function, using node-notifier)
- * - logErrors (gulp-plumber with a custom notification function),
- * - size (gulp-size)
- * - logSize (pre-configured gulp-size)
- */
-module.exports = {
-  // Gulp plugins
-  concat, gulpif, plumber, rename, size, sourcemaps,
-  // Logging helpers and error management
-  notify, logErrors, logSize,
-  // Gulp-based file builder with sourcemaps and concatenation support,
-  // allowing users to just inject one or a few transforms in the middle.
-  commonBuilder
-}
-
-/**
- * gulp-plumber with our custom error handler
- * @returns {*}
- */
-function logErrors() {
-  // don't use an arrow function, we need the `this` instance!
-  return plumber(function(err) {
-    if (!err.plugin) {
-      err.plugin = 'gulp-task-maker'
-    }
-    notify(err)
-    // keep watch tasks running
-    if (this && typeof this.emit === 'function') {
-      this.emit('end')
-    }
-  })
-}
-
-/**
- * Helper function using gulp-size to log the size and path
- * of a file we're about to to write to the filesystem.
- * @param {string} title - Title to differentiate different output
- * @return {*}
- */
-function logSize(title) {
-  return size({
-    showFiles: true,
-    showTotal: false,
-    title: typeof title === 'string' ? title : ''
-  })
-}
+const { isStream } = require('./helpers')
+const { options } = require('./state')
 
 /**
  * gulp workflow (read files, transform, then write to disk),
@@ -70,35 +24,107 @@ function logSize(title) {
  * @param {Array} transforms
  * @return {*}
  */
-function commonBuilder(config, transforms) {
-  if (!Array.isArray(transforms)) { transforms = [] }
-  const destRoot = path.extname(config.dest) !== ''
-    ? path.dirname(config.dest)
-    : config.dest
+function simpleStream(config, transforms) {
+  const { dest, src, sourcemaps: maps } = config
+  if (!Array.isArray(transforms)) {
+    transforms = []
+  }
+
+  // trim filename from dest, so that we write files to a folder
+  const folder = path.extname(dest) !== '' ? path.dirname(dest) : dest
+  const folderLogPath = './' + (folder.trim() ? `${folder}/` : '')
 
   // sourcemaps off by default: not all file formats can use them!
-  const doMaps = Boolean(config.sourcemaps)
-  const destMaps = doMaps && typeof config.sourcemaps === 'string'
-    ? config.sourcemaps
-    : '.'
+  let mapsUrl = null
+  if (typeof maps === 'string') mapsUrl = maps
+  else if (maps === true) mapsUrl = '.'
 
   // create plumbed stream, init sourcemaps
-  let stream = gulp.src(config.src).pipe(logErrors())
-  if (doMaps) {
-    stream = stream.pipe(sourcemaps.init())
-  }
+  let stream = gulp
+    .src(src, { allowEmpty: !options.strict })
+    .pipe(catchErrors())
+  if (mapsUrl) stream = stream.pipe(sourcemaps.init())
 
   // insert source transforms in the middle
-  for (let t of transforms) {
-    if (t && typeof t === 'object' && typeof t.pipe === 'function') {
-      stream = stream.pipe(t)
-    }
+  for (const transform of transforms.filter(isStream)) {
+    stream = stream.pipe(transform)
   }
 
-  // log file sizes, write files and sourcemaps
-  stream = stream.pipe(logSize(`./${destRoot}/`))
-  if (doMaps) {
-    stream = stream.pipe(sourcemaps.write(destMaps))
+  // log file sizes
+  stream = stream.pipe(showSizes(folderLogPath))
+
+  // write files
+  if (mapsUrl) stream = stream.pipe(sourcemaps.write(mapsUrl))
+  return stream.pipe(gulp.dest(folder))
+}
+
+/**
+ * gulp-plumber with our custom error handler
+ * @return {*}
+ */
+function catchErrors() {
+  // don't use an arrow function, we need the `this` instance!
+  return plumber(function(err) {
+    if (!err.plugin) {
+      err.plugin = 'gulp-task-maker'
+    }
+    showError(err)
+    // keep watch tasks running
+    if (this && typeof this.emit === 'function') {
+      this.emit('end')
+    }
+  })
+}
+
+/**
+ * Log errors (and optionally notify with a system notification)
+ * Throws if gulp-task-maker is in strict mode
+ * @param {object} err
+ */
+function showError(err) {
+  if (!err) return
+  const message =
+    typeof err === 'string' ? err : err.message || err.formatted || ''
+
+  // Show system notification
+  if (!err.warn && options.notify) {
+    const plugin = err.plugin || 'gulp-task-maker'
+    const where = path.basename(process.cwd())
+    notifier.notify({
+      title: `${where}: ${plugin} error`,
+      message: message.replace(/\s*\n+\s*/g, '\n')
+    })
   }
-  return stream.pipe( gulp.dest(destRoot) )
+
+  // Throw or log in console
+  if (options.strict) throw err
+  else {
+    const prefix = err.plugin ? `[${err.plugin}] ` : ''
+    const parts = message.replace('\n', '_S_E_P_').split('_S_E_P_', 2)
+    const header = parts[0]
+    const details =
+      parts.length === 2 ? ('\n' + parts[1]).replace(/\n/g, '\n  ') : ''
+    log(prefix + header + details)
+  }
+}
+
+/**
+ * Helper function using gulp-size to log the size and path
+ * of a file we're about to to write to the filesystem.
+ * @param {string} folder - shown as a 'title' prefix before the file name
+ * @return {*}
+ */
+function showSizes(folder) {
+  return size({
+    showFiles: true,
+    showTotal: false,
+    title: folder || ''
+  })
+}
+
+module.exports = {
+  catchErrors,
+  showError,
+  showSizes,
+  simpleStream
 }

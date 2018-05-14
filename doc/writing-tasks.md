@@ -75,7 +75,7 @@ const gulp = require('gulp')
 const path = require('path')
 const concat = require('gulp-concat')
 
-module.exports = function(config) {
+module.exports = function minifyJS(config) {
   let file = 'build.js'
   let dir = config.dest
   // filename from 'config.dest' if there is one
@@ -89,11 +89,13 @@ module.exports = function(config) {
 }
 ```
 
-We could also make some actions optional. For instance, let’s add facultative UglifyJS support. For that, we’re going to use `gulp-if`, which is already provided by `gulp-task-maker` in the second argument to our function, along with `gulp-concat` and other useful tools.
+We could also make some actions optional. For instance, let’s add facultative UglifyJS support. For that, we’re going to use the `gulp-if` package.
 
 ```js
 const gulp = require('gulp')
 const path = require('path')
+const concat = require('gulp-concat')
+const gulpif = require('gulp-if')
 const uglify = require('gulp-uglify')
 
 module.exports = function(config, tools) {
@@ -104,14 +106,9 @@ module.exports = function(config, tools) {
     file = path.basename(config.dest)
     dir = path.dirname(config.dest)
   }
-  // check the 'config.minify' option
-  const minifyOrMaybeNot = tools.gulpif(
-    config.minify === true,
-    uglify()
-  )
   return gulp.src(config.src)
-    .pipe(tools.concat(file))
-    .pipe(minifyOrMaybeNot)
+    .pipe(concat(file))
+    .pipe(gulpif(config.minify === true, uglify()))
     .pipe(gulp.dest(dir))
 }
 ```
@@ -167,12 +164,9 @@ return stream.pipe(gulp.dest(/* … */))
 
 The second argument received by your task function is a collection of very common gulp plugins:
 
-- `tools.concat`: gulp-concat
-- `tools.gulpif`: gulp-if
-- `tools.rename`: gulp-rename
-- `tools.sourcemaps`: gulp-sourcemaps
 - `tools.plumber`: gulp-plumber
 - `tools.size`: gulp-size
+- `tools.sourcemaps`: gulp-sourcemaps
 
 In addition to that, there are a few tools using `gulp-task-maker`’s logging-and-notification function:
 
@@ -186,8 +180,11 @@ We can use those tools and helpers to make our task a bit friendlier for ourselv
 2. Add a log of files we’re writing to disk.
 
 ```js
+const concat = require('gulp-concat')
 const gulp = require('gulp')
+const gulpif = require('gulp-if')
 const path = require('path')
+const sourcemaps = require('gulp-sourcemaps')
 const uglify = require('gulp-uglify')
 
 module.exports = function(config, tools) {
@@ -197,24 +194,20 @@ module.exports = function(config, tools) {
     file = path.basename(config.dest)
     dir = path.dirname(config.dest)
   }
-  const minifyTransform = tools.gulpif(
-    config.minify === true,
-    uglify()
-  )
 
   return gulp.src(config.src)
      // notify & log all errors happening next
     .pipe(tools.logErrors())
     // start sourcemaps
-    .pipe(tools.sourcemaps.init())
+    .pipe(sourcemaps.init())
     // concatenate sources
-    .pipe(tools.concat(file))
+    .pipe(concat(file))
     // apply UglifyJS, if enabled
-    .pipe(minifyTransform)
+    .pipe(gulpif(config.minify === true, uglify()))
     // log path and size of resulting files
     .pipe(tools.logSize())
     // write sourcemaps
-    .pipe(tools.sourcemaps.write('.'))
+    .pipe(sourcemaps.write('.'))
     // and finally write to disk
     .pipe(gulp.dest(dir))
 }
