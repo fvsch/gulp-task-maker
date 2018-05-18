@@ -68,33 +68,21 @@ function normalizeSrc(conf) {
 }
 
 /**
- * Take the user's task config (which can be a single object,
- * or an array of config objects), and return an array of complete
- * and normalized config objects.
- * @param {string} name
- * @param {object|undefined} baseConfig
- * @param {Array} userConfig
- * @return {Array}
- */
-function normalizeUserConfig(name, baseConfig, userConfigs) {
-  return (
-    userConfigs
-      .map(obj => Object.assign({}, baseConfig, obj))
-      // Normalize the src and watch properties
-      .map(normalizeSrc)
-      // And only keep valid configs objects
-      .filter(conf => validateConfig(name, conf))
-  )
-}
-
-/**
+ * Enrich task data with final config objects, a flat sources list
+ * (for debugging), and a task id. Then define gulp tasks for each valid
+ * config object.
  * @param {object} data
  */
 function registerTasks(data) {
-  const { name, callback, configs } = data
+  const { callback, configs, errors, name } = data
 
-  // Check config validity
-  const normalized = normalizeUserConfig(name, callback.defaultConfig, configs)
+  const normalized = configs
+    // Merge with default config
+    .map(obj => Object.assign({}, callback.defaultConfig, obj))
+    // Normalize the src and watch properties
+    .map(normalizeSrc)
+    // And only keep valid configs objects
+    .filter(conf => validateConfig(name, conf, errors))
   data.normalizedConfigs = normalized
 
   // save sources list, to be checked later
@@ -144,9 +132,10 @@ function registerTaskGroups() {
  * that config otherwise.
  * @param {string} name
  * @param {object} conf
+ * @param {array} errorStore
  * @return {boolean}
  */
-function validateConfig(name, conf) {
+function validateConfig(name, conf, errorStore) {
   let errors = []
   if (typeof conf.dest !== 'string') {
     errors.push(`Property 'dest' must be a string`)
@@ -164,7 +153,7 @@ function validateConfig(name, conf) {
         '\n'
       )}\nIn config: ${JSON.stringify(conf, null, 2)}`
     ),
-    options.strict ? null : scripts[name].errors
+    options.strict ? null : errorStore
   )
   return false
 }

@@ -76,8 +76,7 @@ function addTasks(callback, configs) {
     scripts.push(data)
   } else {
     return handleError(
-      new Error(`Task '${data.name}' already configured\n${USAGE_REDECLARE}`),
-      data.errors
+      new Error(`Task '${data.name}' already configured\n${USAGE_REDECLARE}`)
     )
   }
 
