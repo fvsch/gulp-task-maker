@@ -1,5 +1,5 @@
 {
-  "name": "@gulp-task-maker/mincss",
+  "name": "@gtm-example/mincss",
   "private": true,
   "dependencies": {
     "gulp-autoprefixer": "^5.0",

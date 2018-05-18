@@ -1,0 +1,3 @@
+
+- Rewrite most docs for v2
+- Document GTM_NOTIFY, GTM_PARALLEL and GTM_STRICT

@@ -1,5 +1,5 @@
 {
-  "name": "@gulp-task-maker/minjs",
+  "name": "@gtm-example/minjs",
   "private": true,  
   "dependencies": {
     "gulp-concat": "^2.6",

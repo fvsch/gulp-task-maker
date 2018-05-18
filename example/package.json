@@ -1,5 +1,5 @@
 {
-  "name": "gulp-task-maker-example",
+  "name": "gtm-example",
   "private": true,
   "scripts": {
     "list": "gulp --tasks",
@@ -11,8 +11,8 @@
     "normalize.css": "^8.0"
   },
   "devDependencies": {
-    "@gulp-task-maker/mincss": "file:tasks/mincss",
-    "@gulp-task-maker/minjs": "file:tasks/minjs",
+    "@gtm-example/mincss": "file:tasks/mincss",
+    "@gtm-example/minjs": "file:tasks/minjs",
     "gulp": "^4.0",
     "gulp-task-maker": "2.0.0-beta1"
   },
