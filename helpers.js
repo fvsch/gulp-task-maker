@@ -1,3 +1,5 @@
+const path = require('path')
+
 /**
  * Get a deep copy of scalar data and objects that contain scalar data
  * @param {*} data
@@ -83,12 +85,26 @@ function isStream(value) {
 
 /**
  * Load a task module
- * @param {string} scriptId
+ * @param {string} id
  * @return {function}
  * @throws {Error}
  */
-function loadScript(scriptId) {
+function loadScript(id) {
   let callback = null
+  let scriptId = id
+
+  // treat like a local path if it looks like one
+  if (
+    id.startsWith('./') ||
+    id.startsWith('../') ||
+    id.endsWith('.js') ||
+    (id.includes('/') && !id.startsWith('@'))
+  ) {
+    if (path.isAbsolute(id) === false) {
+      scriptId = path.join(process.cwd(), id)
+    }
+  }
+
   try {
     callback = require(scriptId)
   } catch (err) {

@@ -42,17 +42,9 @@ function addTasks(callback, configs) {
   if (typeof callback === 'function') {
     data.callback = callback
   } else if (typeof callback === 'string') {
+    const scriptId = callback.trim()
     try {
-      const loaded = loadScript(callback)
-      const type = typeof loaded
-      if (type !== 'function') {
-        return handleError(
-          new Error(
-            `Module '${callback}' expected to export a function, was: '${type}'`
-          )
-        )
-      }
-      data.callback = loaded
+      data.callback = loadScript(scriptId)
     } catch (err) {
       return handleError(err)
     }
