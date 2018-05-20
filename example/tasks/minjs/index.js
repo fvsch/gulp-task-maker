@@ -17,7 +17,7 @@ function minjs(config, tools) {
   ])
 }
 
-minjs.defaultConfig = {
+minjs.baseConfig = {
   minify: true,
   sourcemaps: '.',
   uglifyjs: {

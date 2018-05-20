@@ -1,66 +1,6 @@
 const path = require('path')
 
 /**
- * Get a deep copy of scalar data and objects that contain scalar data
- * @param {*} data
- * @param {object} depth - configure depth (e.g. to avoid infinite recursion)
- * @param {number} depth.max
- * @param {number} depth.current
- * @return {*}
- */
-function cloneData(data, depth = 0) {
-  const maxDepth = 10
-  const type = typeof data
-  if (
-    data == null ||
-    type === 'boolean' ||
-    type === 'number' ||
-    type === 'string'
-  ) {
-    return data
-  }
-  if (Array.isArray(data)) {
-    const result = []
-    if (depth < maxDepth) {
-      for (const item of data) {
-        result.push(cloneData(item, depth + 1))
-      }
-    }
-    return result
-  }
-  if (type === 'object' || type === 'function') {
-    const result = {}
-    const subType =
-      typeof data.constructor === 'function' ? data.constructor.name : ''
-    // mark functions as such (when used for debugging)
-    if (subType && subType !== 'Object') {
-      let info = `[${subType}] `
-      switch (subType) {
-        case 'Function':
-          info += data.name
-          break
-        case 'RegExp':
-        case 'Error':
-          info += String(data)
-          break
-      }
-      result.__ = info.trim()
-    }
-    // prevent deep cloning the global object
-    if (typeof global === 'object' && data === global) {
-      return result
-    }
-    // clone enumerable properties
-    if (depth < maxDepth) {
-      for (const key of Object.keys(data)) {
-        result[key] = cloneData(data[key], depth + 1)
-      }
-    }
-    return result
-  }
-}
-
-/**
  * Basic workaround for typeof null === 'object'
  * @param {any} value
  * @return {boolean}
@@ -158,7 +98,6 @@ function toUniqueStrings(input) {
 }
 
 module.exports = {
-  cloneData,
   isObject,
   isStream,
   loadScript,

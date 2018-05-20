@@ -1,3 +1,4 @@
+const copy = require('fast-copy').default
 const gulp = require('gulp')
 
 const { handleError, showLoadingErrors } = require('./feedback')
@@ -60,10 +61,9 @@ function getTaskNames() {
 function normalizeSrc(conf) {
   const src = toUniqueStrings(conf.src)
   const watch = conf.watch === true ? src : toUniqueStrings(conf.watch)
-  // shallow clone to replace the src and watch props cleanly
-  return Object.assign(Object.create(null), conf, {
-    src: src,
-    watch: watch
+  return Object.assign({}, conf, {
+    src: copy(src),
+    watch: copy(watch)
   })
 }
 
@@ -78,7 +78,7 @@ function registerTasks(data) {
 
   const normalized = configs
     // Merge with default config
-    .map(obj => Object.assign({}, callback.defaultConfig, obj))
+    .map(obj => Object.assign({}, callback.baseConfig, obj))
     // Normalize the src and watch properties
     .map(normalizeSrc)
     // And only keep valid configs objects

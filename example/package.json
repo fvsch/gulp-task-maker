@@ -4,7 +4,7 @@
   "scripts": {
     "list": "gulp --tasks",
     "build": "gulp build",
-    "watch": "gulp watch"
+    "watch": "gulp build watch --series"
   },
   "dependencies": {
     "jquery": "^3.3",

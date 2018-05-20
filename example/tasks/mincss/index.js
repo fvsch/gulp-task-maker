@@ -19,7 +19,7 @@ function mincss(config, tools) {
   ])
 }
 
-mincss.defaultConfig = {
+mincss.baseConfig = {
   minify: true,
   sourcemaps: '.',
   autoprefixer: {

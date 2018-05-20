@@ -1,3 +1,5 @@
+const copy = require('fast-copy').default
+
 const {
   handleError,
   showLoadingErrors,
@@ -6,7 +8,6 @@ const {
 } = require('./feedback')
 
 const {
-  cloneData,
   isObject,
   loadScript,
   strToBool,
@@ -140,8 +141,8 @@ function setOptions(input) {
 function getStatus() {
   return {
     gulpTasks: getTaskNames(),
-    options: cloneData(options),
-    scripts: cloneData(scripts)
+    options: copy(options),
+    scripts: copy(scripts)
   }
 }
 
