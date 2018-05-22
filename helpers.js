@@ -1,4 +1,20 @@
-const path = require('path')
+const fancyLog = require('fancy-log')
+
+/**
+ * Custom long log format using fancy-log
+ * @param {string} message
+ */
+function customLog(message) {
+  const trimmed = message.trim()
+  const limit = trimmed.indexOf('\n')
+  if (limit === -1) {
+    fancyLog(trimmed)
+  } else {
+    const title = trimmed.slice(0, limit).trim()
+    const details = trimmed.slice(limit).trim()
+    fancyLog(`${title}${('\n' + details).replace(/\n/g, '\n  ')}`)
+  }
+}
 
 /**
  * Basic workaround for typeof null === 'object'
@@ -21,41 +37,6 @@ function isStream(value) {
     typeof value === 'object' &&
     typeof value.pipe === 'function'
   )
-}
-
-/**
- * Load a task module
- * @param {string} id
- * @return {function}
- * @throws {Error}
- */
-function loadScript(id) {
-  let callback = null
-  let scriptId = id
-
-  // treat like a local path if it looks like one
-  if (
-    id.startsWith('./') ||
-    id.startsWith('../') ||
-    id.endsWith('.js') ||
-    (id.includes('/') && !id.startsWith('@'))
-  ) {
-    if (path.isAbsolute(id) === false) {
-      scriptId = path.join(process.cwd(), id)
-    }
-  }
-
-  try {
-    callback = require(scriptId)
-  } catch (err) {
-    throw new Error(`Could not load module '${scriptId}':\n${err}`)
-  }
-  if (typeof callback !== 'function') {
-    throw new Error(
-      `Expected module '${scriptId}' to export a function, was ${typeof callback}`
-    )
-  }
-  return callback
 }
 
 /**
@@ -98,9 +79,9 @@ function toUniqueStrings(input) {
 }
 
 module.exports = {
+  customLog,
   isObject,
   isStream,
-  loadScript,
   strToBool,
   toObjectArray,
   toUniqueStrings

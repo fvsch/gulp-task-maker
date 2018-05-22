@@ -2,17 +2,17 @@
   "name": "gtm-example",
   "private": true,
   "scripts": {
-    "list": "gulp --tasks",
     "build": "gulp build",
-    "watch": "gulp build watch --series"
+    "watch": "gulp --series build watch",
+    "debug": "GTM_DEBUG=1 gulp --tasks"
   },
   "dependencies": {
     "jquery": "^3.3",
     "normalize.css": "^8.0"
   },
   "devDependencies": {
-    "@gtm-example/mincss": "file:tasks/mincss",
-    "@gtm-example/minjs": "file:tasks/minjs",
+    "@gtm-example/mincss": "./tasks/mincss",
+    "@gtm-example/minjs": "./tasks/minjs",
     "gulp": "^4.0",
     "gulp-task-maker": "2.0.0-beta1"
   },

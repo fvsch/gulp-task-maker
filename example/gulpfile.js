@@ -27,5 +27,3 @@ gtm.add('./tasks/minjs', {
   watch: 'src/*.js',
   dest: 'dist/main.js'
 })
-
-gtm.done()

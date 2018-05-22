@@ -15,8 +15,8 @@ Helps you write gulp tasks focused on building assets, so that you can:
 *Documentation:*
 
 1. [Short guide to gulp-task-maker](#short-guide-to-gulp-task-maker)
-2. [In depth: Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/configuring-tasks.md)
-3. [In depth: Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/writing-tasks.md)
+2. [In depth: Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/configuring-tasks.md)
+3. [In depth: Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/writing-tasks.md)
 
 ***
 
@@ -88,7 +88,7 @@ module.exports = function(config, tools) {
 
 Once you have a task script you like, you can easily copy it to another project that uses `gulp-task-maker`, and only change the config.
 
-For a complete guide about writing tasks for `gulp-task-maker`, see [In depth: Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/writing-tasks.md).
+For a complete guide about writing tasks for `gulp-task-maker`, see [In depth: Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/writing-tasks.md).
 
 ### Running tasks
 
@@ -138,5 +138,5 @@ $ ./node_modules/.bin/gulp watch
 
 For more, look at:
 
-- the [Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/configuring-tasks.md) and [Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/doc/writing-tasks.md) pages;
+- the [Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/configuring-tasks.md) and [Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/writing-tasks.md) pages;
 - the [example directory](https://github.com/fvsch/gulp-task-maker/tree/master/example) in this repo; it contains a few easily fixable errors, to demonstrate how error reporting works.

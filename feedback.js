@@ -1,5 +1,54 @@
 const glob = require('glob')
+const { options, scripts } = require('./state')
+const { customLog } = require('./helpers')
 const { showError } = require('./tools')
+const util = require('util')
+
+/**
+ * Usage info for several errors
+ * @type {string}
+ */
+const USAGE_INFO = `
+Expected usage:
+const gtm = require('gulp-task-maker')
+
+// set up a single task
+gtm.add('./path/to/tasks/something.js', { … })
+
+// or skip the script loader and provide your own function
+gtm.add(myTaskFunction, { … })
+`
+
+/**
+ * Show saved errors if things went wrong
+ */
+function onExit() {
+  if (!onExit.done) {
+    if (options.strict !== true) showLoadingErrors()
+    if (options.debug === true) showDebugInfo()
+  }
+  onExit.done = true
+}
+
+/**
+ * Get debug info such as the current options and GTM state
+ * @return {object}
+ */
+function showDebugInfo() {
+  customLog(`gulp-task-maker options:\n${util.inspect(options)}`)
+  for (const data of scripts) {
+    const info = {
+      callback: data.callback,
+      configs: data.normalizedConfigs,
+      errors: data.errors
+    }
+    customLog(
+      `gulp-task-maker script '${data.name}':\n${util.inspect(info, {
+        depth: 6
+      })}`
+    )
+  }
+}
 
 /**
  * Store an error for later, log it instantly or throw if in strict mode
@@ -19,13 +68,8 @@ function handleError(err, store) {
 
 /**
  * Show errors which occurred when first loading a task's script.
- * @param {object} scripts
  */
-function showLoadingErrors(scripts) {
-  if (showLoadingErrors.shown) {
-    // was turned off in previous versions, maybe we can remove this flag?
-    return
-  }
+function showLoadingErrors() {
   const failedTasks = []
   const taskStatus = {}
 
@@ -55,7 +99,6 @@ function showLoadingErrors(scripts) {
   }
 
   if (failedTasks.length !== 0) {
-    showLoadingErrors.shown = true
     const messages = []
     for (const key of Object.keys(taskStatus)) {
       messages.push(
@@ -73,53 +116,10 @@ function showLoadingErrors(scripts) {
   }
 }
 
-/**
- * Usage info for several errors
- * @type {string}
- */
-const USAGE_INFO = `
-Expected usage:
-const gtm = require('gulp-task-maker')
-
-// set up with the task directory path
-gtm.add('path/to/tasks', {
-  mytask: { … },
-  othertask: { … }
-})
-
-// or set up a single task
-gtm.add('path/to/tasks/something.js', { … })
-
-// or skip the script loader and provide your own function
-gtm.add(myTaskFunction, { … })
-`
-
-/**
- * Usage info for redeclared tasks
- * @type {string}
- */
-const USAGE_REDECLARE = `
-This error happens when you’re trying to configure
-the same task several times with gulp-task-maker.
-Make sure you are not redeclaring the same task script.
-
-// Usage for declaring a script with several builds:
-const gtm = require('gulp-task-maker')
-
-// bad, will fail!
-gtm.add('path/to/mytask.js', { src: 'foo/*.js', dest: 'dist/foo.js' })
-gtm.add('path/to/mytask.js', { src: 'bar/*.js', dest: 'dist/bar.js' })
-
-// do this instead:
-gtm.add('path/to/mytask.js', [
-  { src: 'foo/*.js', dest: 'dist/foo.js' },
-  { src: 'bar/*.js', dest: 'dist/bar.js' }
-])
-`
-
 module.exports = {
-  handleError,
-  showLoadingErrors,
   USAGE_INFO,
-  USAGE_REDECLARE
+  handleError,
+  onExit,
+  showDebugInfo,
+  showLoadingErrors
 }
