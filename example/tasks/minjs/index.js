@@ -1,23 +1,22 @@
-const path = require('path')
 const concat = require('gulp-concat')
 const uglify = require('gulp-uglify')
 
 /**
  * Make a simple JS build, optionally concatenated and minified
+ * @param {function} done - call to signal async completion
  * @param {object} config - task configuration
  * @param {object} tools - gtm utility functions
  * @return {object}
  */
-function minjs(config, tools) {
-  const ext = path.extname(config.dest)
-
+function minjs(done, config, tools) {
   return tools.simpleStream(config, [
-    ext === '.js' && concat(path.basename(config.dest)),
+    config.concat && concat(config.concat),
     config.minify && uglify(config.uglifyjs)
   ])
 }
 
 minjs.baseConfig = {
+  concat: false,
   minify: true,
   sourcemaps: '.',
   uglifyjs: {

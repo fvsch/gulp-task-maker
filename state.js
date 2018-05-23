@@ -13,8 +13,8 @@ const options = {
   parallel: strToBool(process.env.GTM_PARALLEL, true),
   strict: strToBool(process.env.GTM_STRICT, false),
   prefix: {
-    build: 'build:',
-    watch: 'watch:'
+    build: 'build_',
+    watch: 'watch_'
   },
   groups: {
     build: name => name.startsWith(options.prefix.build),

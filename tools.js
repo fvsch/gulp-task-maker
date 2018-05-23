@@ -9,7 +9,7 @@ const sourcemaps = require('gulp-sourcemaps')
 const notifier = require('node-notifier')
 const path = require('path')
 
-const { customLog, isStream } = require('./helpers')
+const { customLog, isObject, isStream } = require('./helpers')
 const { options } = require('./state')
 
 /**
@@ -77,37 +77,57 @@ function showSizes(folder) {
  * @return {*}
  */
 function simpleStream(config, transforms) {
-  const { dest, src, sourcemaps: maps } = config
   if (!Array.isArray(transforms)) {
     transforms = []
   }
 
-  // trim filename from dest, so that we write files to a folder
-  const folder = path.extname(dest) !== '' ? path.dirname(dest) : dest
-  const folderLogPath = './' + (folder.trim() ? `${folder}/` : '')
+  // check that we have a valid config
+  let err = null
+  if (!isObject(config)) {
+    err = `missing config object, received '${typeof config}'`
+  } else {
+    const { dest, src } = config
+    if (typeof dest !== 'string' && typeof dest !== 'function') {
+      err = `expected a string or function for 'dest' property in config`
+    } else if (!Array.isArray(src) && typeof src !== 'string') {
+      err = `expected a string or array for 'src' property in config`
+    }
+  }
+  if (err != null) {
+    throw new Error(`${err}\n${JSON.stringify(config, null, 2)}`)
+  }
 
-  // sourcemaps off by default: not all file formats can use them!
-  let mapsUrl = null
-  if (typeof maps === 'string') mapsUrl = maps
-  else if (maps === true) mapsUrl = '.'
-
-  // create plumbed stream, init sourcemaps
+  // create plumbed stream
   let stream = gulp
-    .src(src, { allowEmpty: !options.strict })
+    .src(config.src, { allowEmpty: !options.strict })
     .pipe(catchErrors())
-  if (mapsUrl) stream = stream.pipe(sourcemaps.init())
 
-  // insert source transforms in the middle
+  // init sourcemaps
+  if (config.sourcemaps) {
+    stream = stream.pipe(sourcemaps.init())
+  }
+
+  // insert transforms in the middle
   for (const transform of transforms.filter(isStream)) {
     stream = stream.pipe(transform)
   }
 
   // log file sizes
-  stream = stream.pipe(showSizes(folderLogPath))
+  stream = stream.pipe(
+    showSizes(typeof config.dest === 'string' ? config.dest + '/' : undefined)
+  )
+
+  // generate sourcemaps
+  if (config.sourcemaps) {
+    stream = stream.pipe(
+      sourcemaps.write(
+        typeof config.sourcemaps === 'string' ? config.sourcemaps : '.'
+      )
+    )
+  }
 
   // write files
-  if (mapsUrl) stream = stream.pipe(sourcemaps.write(mapsUrl))
-  return stream.pipe(gulp.dest(folder))
+  return stream.pipe(gulp.dest(config.dest))
 }
 
 module.exports = {

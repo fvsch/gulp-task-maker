@@ -1,5 +1,5 @@
+const addTasks = require('./add')
 const { onExit } = require('./feedback')
-const { addTasks } = require('./register')
 const { setOptions } = require('./state')
 
 process.on('exit', onExit)

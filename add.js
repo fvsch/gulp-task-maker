@@ -1,8 +1,8 @@
 const gulp = require('gulp')
 const path = require('path')
 
-const { handleError, showLoadingErrors, USAGE_INFO } = require('./feedback')
-const { toObjectArray, toUniqueStrings } = require('./helpers')
+const { handleError, USAGE_INFO } = require('./feedback')
+const { isObject, toObjectArray, toUniqueStrings } = require('./helpers')
 const { options, scripts } = require('./state')
 const tools = require('./tools')
 
@@ -11,7 +11,7 @@ const tools = require('./tools')
  * @param {function|string} callbackMixed
  * @param {array|object} configsMixed
  */
-function addTasks(callbackMixed, configsMixed) {
+module.exports = function addTasks(callbackMixed, configsMixed) {
   let callback = null
   try {
     callback = getTaskCallback(callbackMixed)
@@ -36,21 +36,24 @@ function addTasks(callbackMixed, configsMixed) {
 
   // Validate and merge configs
   const configs = toObjectArray(configsMixed)
-  const normalizedConfigs = normalizeConfigs(configs, data)
-  const sources = normalizedConfigs
-    .map(conf => conf.src)
-    .reduce((arr, item) => arr.concat(item))
-
-  // Save data
   if (configs.length === 0) {
     return handleError(
       new Error(`Task '${data.name}': missing config object\n${USAGE_INFO}`)
     )
-  } else {
-    data.configs = data.configs.concat(configs)
-    data.normalizedConfigs = data.normalizedConfigs.concat(normalizedConfigs)
-    data.sources = toUniqueStrings(data.sources.concat(sources))
   }
+  const normalizedConfigs = configs
+    .map(obj => normalizeConfig(obj, data))
+    .filter(isObject)
+  const sources = normalizedConfigs
+    .map(conf => conf.src)
+    .reduce((arr, item) => arr.concat(item), [])
+
+  // Save data
+  Object.assign(data, {
+    configs: data.configs.concat(configs),
+    normalizedConfigs: data.normalizedConfigs.concat(normalizedConfigs),
+    sources: toUniqueStrings(data.sources.concat(sources))
+  })
 
   // define gulp tasks and overwrite group tasks (e.g. 'build' and 'watch')
   defineTasksForConfig(data)
@@ -119,7 +122,7 @@ function defineTasksForConfig(taskData) {
     const watchId = options.prefix.watch + taskId
 
     // Register build task
-    gulp.task(buildId, () => callback(config, tools))
+    gulp.task(buildId, done => callback(done, config, tools))
 
     // Register matching watch task
     if (Array.isArray(config.watch) && config.watch.length > 0) {
@@ -180,68 +183,50 @@ function getTaskCallback(callback) {
 }
 
 /**
- * Merge task config with a task's baseConfig, and filter out invalid configs
- * @param {Array} configs
- * @param {Object} taskData
- * @return {Array}
+ * Normalize config object:
+ * - Merge with baseConfig
+ * - Check the 'dest', 'src' and 'watch' properties of config objects.
+ *   (They can be missing, but if present they should be valid.)
+ * @param {object} config
+ * @param {object} data
+ * @return {object|undefined}
  */
-function normalizeConfigs(configs, taskData) {
-  return (
-    configs
-      // Merge with default config
-      .map(obj => Object.assign({}, taskData.callback.baseConfig, obj))
-      // Normalize the src and watch properties
-      .map(normalizeSrc)
-      // And only keep valid configs objects
-      .filter(conf => validateConfig(taskData.name, conf, taskData.errors))
-  )
-}
+function normalizeConfig(config, data) {
+  const newConfig = Object.assign({}, data.callback.baseConfig, config)
+  const { dest, src, watch } = newConfig
+  const errors = []
 
-/**
- * Make sure the 'src' and 'watch' properties of an object are arrays of strings
- * @param {object} conf
- * @return {object}
- */
-function normalizeSrc(conf) {
-  const src = toUniqueStrings(conf.src)
-  const watch = conf.watch === true ? src : toUniqueStrings(conf.watch)
-  return Object.assign({}, conf, {
-    src: src,
-    watch: watch
-  })
-}
+  if (dest != null && typeof dest !== 'string' && typeof dest !== 'function') {
+    errors.push(`- 'dest' must be a string or a function`)
+  }
 
-/**
- * Check that a config object is valid, show an error and drop
- * that config otherwise.
- * @param {string} name
- * @param {object} conf
- * @param {array} errorStore
- * @return {boolean}
- */
-function validateConfig(name, conf, errorStore) {
-  let errors = []
-  if (typeof conf.dest !== 'string') {
-    errors.push(`Property 'dest' must be a string`)
+  if (src != null) {
+    newConfig.src = toUniqueStrings(newConfig.src)
+    if (newConfig.src.length === 0) {
+      errors.push(`- 'src' must be a string or an array of strings`)
+    }
   }
-  if (!Array.isArray(conf.src) || conf.src.length === 0) {
-    errors.push(`Property 'src' property is empty`)
-  }
-  if (errors.length === 0) {
-    return true
-  }
-  // save error for displaying later
-  handleError(
-    new Error(
-      `Invalid config object for '${name}'\n${errors.join(
-        '\n'
-      )}\nIn config: ${JSON.stringify(conf, null, 2)}`
-    ),
-    options.strict ? null : errorStore
-  )
-  return false
-}
 
-module.exports = {
-  addTasks
+  if (watch === true) {
+    if (Array.isArray(newConfig.src) && newConfig.src.length) {
+      newConfig.watch = [].concat(newConfig.src)
+    }
+  } else if (watch) {
+    newConfig.watch = toUniqueStrings(newConfig.watch)
+    if (newConfig.watch.length === 0) {
+      errors.push(`- 'watch' must be boolean, a string or an array of strings`)
+    }
+  }
+
+  if (errors.length > 0) {
+    const msg = [
+      `Invalid config for '${data.name}'`,
+      errors.join('\n'),
+      JSON.stringify(config, null, 2)
+    ].join('\n')
+    handleError(new Error(msg), options.strict ? null : data.errors)
+    return
+  }
+
+  return newConfig
 }
