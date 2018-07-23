@@ -27,7 +27,7 @@ The first parameter for `gtm.add` should be a function, or the name or path of a
 const gtm = require('gulp-task-maker')
 
 // passing a named function as a callback
-const myTask = config => {}
+const myTask = (config, tools) => { tools.done() }
 gtm.add(myTask, { … })
 
 // importing a module (which must export a function)
@@ -41,7 +41,10 @@ The function’s name will be used in the resulting gulp task names, so using an
 
 ```js
 // avoid anonymous functions
-gtm.add(function(config) { console.log(config) }, { … })
+gtm.add(function(config, tools) {
+  console.log(config)
+  tools.done()
+}, { … })
 ```
 
 ### Base task config: the `baseConfig` object
@@ -52,8 +55,9 @@ A task callback may have a default configuration, which will be merged with each
 // gulpfile.js
 const gtm = require('gulp-task-maker')
 
-const myTask = config => {
+const myTask = (config, tools) => {
   console.log(config)
+  tools.done()
 }
 myTask.baseConfig = {
   minify: true,
@@ -66,6 +70,18 @@ gtm.add(myTask, [
   { src: './src/bar/*.js', concat: 'bar.js' },
 ])
 ```
+
+### Task callback arguments
+
+Task callbacks receive two arguments:
+
+1. `config` (object), the config passed to `gtm.add`, normalized and merged with the callback’s `baseConfig`.
+2. `tools` (object), a collection of helpers from gulp and `gulp-task-maker`:
+    - `tools.done` (function): a function provided by gulp4 to signal that a task is finished; you don’t need to use it if you’re already returning a stream.
+    - `tools.catchErrors` (function): returns a pre-configured instance of `gulp-plumber`.
+    - `tools.showError` (function): logs an error object to the console and optionally using system notifications.
+    - `tools.showSizes` (function): returns a pre-configured instance of `gulp-size`.
+    - `tools.simpleStream` (function): takes the task’s config object and an array of transform streams, and returns a stream with sourcemaps support, logging of errors and output files, etc. See [“Writing Tasks” in README.md](./README.md#writing-tasks) for details.
 
 ## Task config objects
 

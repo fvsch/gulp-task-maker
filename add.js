@@ -4,7 +4,7 @@ const path = require('path')
 const { handleError, USAGE_INFO } = require('./feedback')
 const { isObject, toObjectArray, toUniqueStrings } = require('./helpers')
 const { options, scripts } = require('./state')
-const tools = require('./tools')
+const { catchErrors, showError, showSizes, simpleStream } = require('./tools')
 
 /**
  * Register gulp tasks for a given callback function and config object(s)
@@ -122,7 +122,15 @@ function defineTasksForConfig(taskData) {
     const watchId = options.watchPrefix + taskId
 
     // Register build task
-    gulp.task(buildId, done => callback(done, config, tools))
+    gulp.task(buildId, done => {
+      return callback(config, {
+        done: done,
+        catchErrors: catchErrors,
+        showError: showError,
+        showSizes: showSizes,
+        simpleStream: simpleStream
+      })
+    })
 
     // Register matching watch task
     if (Array.isArray(config.watch) && config.watch.length > 0) {

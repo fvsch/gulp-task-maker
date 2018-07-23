@@ -3,12 +3,11 @@ const uglify = require('gulp-uglify')
 
 /**
  * Make a simple JS build, optionally concatenated and minified
- * @param {function} done - call to signal async completion
  * @param {object} config - task configuration
  * @param {object} tools - gtm utility functions
  * @return {object}
  */
-function minjs(done, config, tools) {
+function minjs(config, tools) {
   return tools.simpleStream(config, [
     config.concat && concat(config.concat),
     config.minify && uglify(config.uglifyjs)

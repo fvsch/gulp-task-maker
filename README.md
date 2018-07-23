@@ -25,7 +25,10 @@ Then in your `gulpfile.js`, use gulp-task-maker’s `add` method:
 
 ```js
 const gtm = require('gulp-task-maker')
-const test = config => { console.log(config) }
+const test = (config, tools) => {
+  console.log(config)
+  tools.done()
+}
 
 gtm.add(test, {
   src: './src/*.js',
@@ -90,11 +93,10 @@ const concat = require('gulp-concat')
 const uglify = require('gulp-uglify')
 
 module.exports = function minifyJS(config, tools) {
-  const transforms = [
+  return tools.simpleStream(config, [
     concat(config.bundle), // concatenate files
     uglify() // minify JS
-  ]
-  return tools.simpleStream(config, transforms)
+  ])
 }
 ```
 
