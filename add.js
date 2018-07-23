@@ -118,8 +118,8 @@ function defineTasksForConfig(taskData) {
     } else if (normalizedConfigs.length > 1) {
       taskId += `_${index + 1}`
     }
-    const buildId = options.prefix.build + taskId
-    const watchId = options.prefix.watch + taskId
+    const buildId = options.buildPrefix + taskId
+    const watchId = options.watchPrefix + taskId
 
     // Register build task
     gulp.task(buildId, done => callback(done, config, tools))

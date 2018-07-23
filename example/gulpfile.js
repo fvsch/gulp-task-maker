@@ -10,20 +10,22 @@ const gtm = require('gulp-task-maker')
 gtm.add('./tasks/mincss', [
   {
     name: 'normalize',
-    src: 'node_modules/normalize.css/normalize.css',
-    dest: 'dist/normalize.css',
+    src: './node_modules/normalize.css/normalize.css',
+    dest: './dist',
     sourcemaps: false
   },
   {
     name: 'main',
-    src: 'src/*.css',
-    watch: true,
-    dest: 'dist/main.css'
+    src: './src/*.css',
+    concat: 'main.css',
+    dest: './dist',
+    watch: true
   }
 ])
 
 gtm.add('./tasks/minjs', {
-  src: ['node_modules/jquery/dist/jquery.js', 'src/*.js'],
-  watch: 'src/*.js',
-  dest: 'dist/main.js'
+  src: ['./node_modules/jquery/dist/jquery.js', './src/*.js'],
+  concat: 'main.js',
+  dest: './dist',
+  watch: 'src/*.js'
 })

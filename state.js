@@ -12,13 +12,11 @@ const options = {
   notify: strToBool(process.env.GTM_NOTIFY, true),
   parallel: strToBool(process.env.GTM_PARALLEL, true),
   strict: strToBool(process.env.GTM_STRICT, false),
-  prefix: {
-    build: 'build_',
-    watch: 'watch_'
-  },
+  buildPrefix: 'build_',
+  watchPrefix: 'watch_',
   groups: {
-    build: name => name.startsWith(options.prefix.build),
-    watch: name => name.startsWith(options.prefix.watch)
+    build: name => name.startsWith(options.buildPrefix),
+    watch: name => name.startsWith(options.watchPrefix)
   }
 }
 
@@ -46,12 +44,11 @@ function setOptions(input) {
     if (typeof value === 'boolean') options[key] = value
     else if (value != null) options[key] = strToBool(value)
   }
-  if (isObject(input.prefix)) {
-    for (const name of ['build', 'watch']) {
-      const value = input.prefix[name]
-      if (typeof value === 'string') {
-        options.prefix[name] = value.trim().replace(/\s+/g, '-')
-      }
+  for (const key of ['buildPrefix', 'watchPrefix']) {
+    const value = input[key]
+    if (typeof value === 'string') {
+      const trimmed = value.replace(/\s+/g, '')
+      if (trimmed !== '') options[key] = trimmed
     }
   }
   if (isObject(input.groups)) {

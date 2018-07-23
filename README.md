@@ -1,142 +1,165 @@
 gulp-task-maker
 ===============
 
-Helps you write gulp tasks focused on building assets, so that you can:
+A small wrapper for gulp, which helps you separate task configuration (objects) and implementation (functions).
 
-1. Separate task configuration and implementation.
-2. Configure multiple builds for each task (e.g. with different sources and configuration).
-3. Get matching `build` and `watch` tasks automatically.
-4. Improve developer usability by logging what gets written to disk, use system notifications for errors, etc.
+Some advantages:
 
-`gulp-task-maker` also bundles useful gulp plugins such as `gulp-sourcemaps`, `gulp-if` and `gulp-concat`, and provides a `commonBuilder` helper function that takes care of logging and sourcemaps, reducing boilerplate between tasks.
+- Creates `watch` tasks automatically.
+- Helps you write tasks with sourcemaps, and better logging and system notifications!
+- Reuse the same task with different configuration objects, to create multiple builds.
 
-⚠ Requires Node.js 4 or later.
+⚠ Requires Node.js 6.5 or later.
 
-*Documentation:*
+## Install
 
-1. [Short guide to gulp-task-maker](#short-guide-to-gulp-task-maker)
-2. [In depth: Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/configuring-tasks.md)
-3. [In depth: Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/writing-tasks.md)
-
-***
-
-Short guide to gulp-task-maker
-------------------------------
-
-### Install
-
-At the root of your project, install `gulp` and `gulp-task-maker` as `devDependencies`:
+Install `gulp` and `gulp-task-maker` as `devDependencies`:
 
 ```bash
-npm install -D gulp gulp-task-maker
+npm install --save-dev gulp@4 gulp-task-maker@2
 ```
 
-### Configure
+## Configure
 
-Then in your `gulpfile.js`, you could have:
+Then in your `gulpfile.js`, use gulp-task-maker’s `add` method:
 
 ```js
 const gtm = require('gulp-task-maker')
+const test = config => { console.log(config) }
 
-const jsBuild = {
-  src: ['src/foo/foo.js', 'src/bar/*.js'],
-  dest: 'public/main.js',
-  watch: true
-}
-
-gtm.load('gulp-tasks', {
-  mytask: jsBuild // or [jsBuild1, jsBuild2, …]
+gtm.add(test, {
+  src: './src/*.js',
+  watch: true,
+  dest: './public',
 })
 ```
 
-This will instruct `gulp-task-maker` to load `./gulp-tasks/mytask.js`, and pass it your config object(s). Let’s see how this script might look.
+With this configuration, gulp-task-maker will create four gulp tasks:
 
-### Write tasks
+- `build` (runs all `build_*` tasks)
+- `watch` (runs all `watch_*` tasks)
+- `build_test`
+- `watch_test`
 
-Your config in the previous step  will instruct `gulp-task-maker` to load `./gulp-tasks/mytask.js`, which could look like:
+We can run them on the command line, for example using `npx` (which comes with recent versions of Node and/or `npm`):
+
+```sh
+# run the "parent" build task
+$ npx gulp build
+# run a specific task
+$ npx gulp build_test
+```
+
+Let’s go back to our `gulpfile.js`. We could also:
+
+- tell `gulp-task-maker` to load the `minifyJS` function from a node script,
+- provide an array of config objects, instead of just one,
+- and add any arbitrary config values we want on config objects.
+
+Here is an updated example:
 
 ```js
-const path = require('path')
+gtm.add('./tasks/minifyJS', [
+  {
+    src: [
+      'node_modules/jquery/dist/jquery.js',
+      'node_modules/some-other-lib/dist/some-other-lib.js'
+    ],
+    dest: 'public',
+    bundle: 'vendor.js',
+    sourcemaps: '.'
+  },
+  {
+    src: 'src/*.js',
+    watch: true,
+    dest: 'public',
+    bundle: 'bundle.js',
+    sourcemaps: '.'
+  }
+])
+```
+
+### Writing tasks
+
+With the previous `gulpfile.js`, gulp-task-maker will load the module at `./tasks/minifyJS.js` (or `./tasks/minifyJS/index.js`). This module should export a function (and that function must be named, because we’re using its name for the gulp tasks’ names).
+
+Here is a function that concatenates JS files, minifies the result, and writes it (plus a source map) to a destination folder.
+
+```js
+const concat = require('gulp-concat')
+const uglify = require('gulp-uglify')
+
+module.exports = function minifyJS(config, tools) {
+  const transforms = [
+    concat(config.bundle), // concatenate files
+    uglify() // minify JS
+  ]
+  return tools.simpleStream(config, transforms)
+}
+```
+
+If you’re used to gulp, you can see that we’re not using `gulp.src` and `gulp.dest`. Instead, we’re using `tools.simpleStream` which does this work for us, supports source maps, and logs file sizes. If we want the same result with gulp only, we have to write:
+
+```js
 const gulp = require('gulp')
-const somePlugin = require('gulp-something')
+const concat = require('gulp-concat')
+const plumber = require('gulp-plumber')
+const sourcemaps = require('gulp-sourcemaps')
+const size = require('gulp-size')
+const uglify = require('gulp-uglify')
 
-module.exports = function(config, tools) {
-  const file = path.basename(config.dest)
-  const dir = path.dirname(config.dest)
-  return gulp.src(config.src)      // take some files
-    .pipe(tools.logErrors())       // tell gulp to show errors and continue
-    .pipe(tools.concat(file))      // concatenate files to just one
-    .pipe(somePlugin())            // use a gulp plugin to transform content
-    .pipe(tools.size(`./{dir}/`))  // log resulting file path/names and size
-    .pipe(gulp.dest(dir))          // write resulting files to destination
+module.exports = function minjs(config, tools) {
+  // take some source files
+  return gulp.src(config.src)
+    // use gulp-plumber to log errors (to console + notifications)
+    .pipe(tools.catchErrors())
+    // start source maps
+    .pipe(sourcemaps.init())
+    // concatenate files
+    .pipe(concat(config.bundle))
+    // minify JS
+    .pipe(uglify())
+    // log resulting file names and size
+    .pipe(size())
+    // generate sourcemaps
+    .pipe(sourcemaps.write(config.sourcemaps))
+    // write resulting files to a directory
+    .pipe(gulp.dest(config.dest))
 }
 ```
 
-We could also simplify our task’s function further by using the `tools.commonBuilder` helper:
-
-```js
-const path = require('path')
-const somePlugin = require('gulp-something')
-
-module.exports = function(config, tools) {
-  return tools.commonBuilder(config, [
-    tools.concat(path.basename(config.dest)),
-    somePlugin()
-  ])
-}
-```
-
-Once you have a task script you like, you can easily copy it to another project that uses `gulp-task-maker`, and only change the config.
-
-For a complete guide about writing tasks for `gulp-task-maker`, see [In depth: Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/writing-tasks.md).
+This is a bit longer, as you can see.
 
 ### Running tasks
 
 Finally we can run the gulp command, and get a console output that looks like this:
 
 ```sh
-$ gulp
+$ npx gulp build
 [13:37:21] Using gulpfile ~/Code/my-project/gulpfile.js
-[13:37:21] Starting 'build-mytask'...
+[13:37:21] Starting 'default'...
+[13:37:21] Starting 'build_minifyJS'...
 [13:37:22] ./public/ main.js 88.97 kB
-[13:37:22] Finished 'build-mytask' after 1.12 s
-[13:37:22] Starting 'default'...
-[13:37:22] Finished 'default' after 650 μs
-```
-
-Note that I’m using the global `gulp` command. If you didn’t install gulp globally (with `npm install -g gulp`), you can use it from the `node_modules` directory instead (and I’m going to use this notation from now on):
-
-```sh
-$ ./node_modules/.bin/gulp
-...
-```
-
-Gulp’s `default` task will be set to run all configured builds. You could also explicitely use the main `build` task:
-
-```sh
-$ ./node_modules/.bin/gulp build
-...
+[13:37:22] Finished 'build_minifyJS' after 1.12 s
+[13:37:22] Finished 'build' after 1.13 s
 ```
 
 You could also run a specific build task, which can be useful when you have many:
 
 ```sh
-$ ./node_modules/.bin/gulp build-mytask
+$ npx gulp build_minifyJS
 ...
 ```
 
 Or start the main `watch` task:
 
 ```sh
-$ ./node_modules/.bin/gulp watch
+$ npx gulp watch
 [13:37:49] Using gulpfile ~/Code/my-project/gulpfile.js
-[13:37:49] Starting 'build-mytask'...
-[13:37:49] Finished 'build-mytask' after 2.55 s
 [13:37:49] Starting 'watch'...
-[13:37:49] Finished 'watch' after 4.54 ms
+[13:37:49] Starting 'watch_minifyJS'...
 ```
 
-For more, look at:
+## Full API doc, debugging and more
 
-- the [Configuring tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/configuring-tasks.md) and [Writing tasks](https://github.com/fvsch/gulp-task-maker/blob/master/docs/writing-tasks.md) pages;
-- the [example directory](https://github.com/fvsch/gulp-task-maker/tree/master/example) in this repo; it contains a few easily fixable errors, to demonstrate how error reporting works.
+For a complete guide on using `gulp-task-maker`’s API, see [the API docs](https://github.com/fvsch/gulp-task-maker/blob/v2/API.md).
